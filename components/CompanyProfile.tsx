@@ -30,12 +30,22 @@ const TOPICS = [
  *
  * Fixed-width (1440px design) to match the Figma frame for a pixel
  * comparison, same as Hero.tsx.
+ *
+ * `id="company-profile"` is the About Hero's "About Us" button's scroll
+ * target (components/shared/scroll-link.tsx) and SiteHeader's own
+ * overlay->solid trigger target on this page — see site-header.tsx.
+ * `scroll-mt-[var(--header-h)]` makes a ScrollLink landing stop with this
+ * section's own top padding as the breathing room above the heading, no
+ * extra offset on top of that. `tabIndex={-1}` + `outline-none` let
+ * ScrollLink move keyboard focus here after landing without joining
+ * normal Tab order or showing a focus ring.
  */
 export function CompanyProfile() {
   return (
     <section
       id="company-profile"
-      className="relative flex w-[1440px] flex-col"
+      tabIndex={-1}
+      className="relative flex w-[1440px] scroll-mt-[var(--header-h)] flex-col outline-none"
       style={{
         backgroundColor: "var(--fig-color-neutral-0)",
         paddingTop: "var(--fig-spacing-60)",

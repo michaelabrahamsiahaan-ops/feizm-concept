@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Search } from "lucide-react";
 
@@ -13,7 +13,13 @@ const NAV_LINKS = [
   "Support",
 ];
 
-const HEADER_HEIGHT = 75;
+// Only an initial value for the ref below, corrected synchronously (before
+// paint) by the ResizeObserver effect the first time it runs — never read
+// again after that. Matches globals.css's own `--header-h` fallback for
+// the same reason (see that file's comment); neither one is the source of
+// truth for the app's actual scroll-offset math, which is the live
+// measured DOM height.
+const INITIAL_HEADER_HEIGHT = 75;
 const TRANSITION = "duration-[250ms] ease-in-out motion-reduce:transition-none";
 
 /**
@@ -71,68 +77,132 @@ const TRANSITION = "duration-[250ms] ease-in-out motion-reduce:transition-none";
  * (Tailwind's `prefers-reduced-motion` variant) collapses the cross-fade
  * to an instant swap, no separate JS media-query branch needed.
  *
- * Scroll trigger: solid activates when the "company-profile" section's
- * top edge reaches the header's own bottom edge (not an arbitrary scrollY
- * pixel value) — an IntersectionObserver on #company-profile with
- * `rootMargin: "-75px 0px 0px 0px"` (shrinks the observed viewport by the
- * header's height from the top) and threshold 0. The state itself is
- * computed from `entry.boundingClientRect.top <= HEADER_HEIGHT` inside the
- * callback rather than trusting `entry.isIntersecting` directly — isIntersecting
- * alone would incorrectly flip back to "overlay" once the (very tall)
- * company-profile section scrolls entirely past the viewport further down
- * the page, since at that point it's no longer intersecting ANYTHING. Using
- * the live boundingClientRect instead stays correct deep into later
- * sections (a large negative top is still <= HEADER_HEIGHT, correctly
- * staying "solid") and reverts cleanly on the way back up.
+ * Scroll trigger: solid activates when the trigger section's top edge
+ * reaches the header's own bottom edge (not an arbitrary scrollY pixel
+ * value) — computed from `target.getBoundingClientRect().top <=
+ * headerHeight` on every scroll tick (rAF-throttled, passive listener;
+ * see the trigger effect below). The live-position read rather than a
+ * cached scrollY also means this stays correct deep into later sections
+ * (a large negative top is still <= headerHeight, correctly staying
+ * "solid") and reverts cleanly scrolling back up.
+ *
+ * This used to be an IntersectionObserver on a 1px sentinel with a
+ * `rootMargin` shrunk by the header's height, which is the usual trick
+ * for "did this line cross the header's bottom edge" — cheaper than a
+ * scroll listener, and correct for ordinary user scrolling. It broke for
+ * ScrollLink's own landings specifically: `scroll-margin-top:
+ * var(--header-h)` means a ScrollLink scroll lands with the sentinel's
+ * top EXACTLY at the header's height — i.e. exactly on the rootMargin
+ * boundary IntersectionObserver was watching, not past it. Native smooth
+ * scrolling is monotonic (no overshoot), so the animation approaches that
+ * boundary from one side and stops precisely there, never crossing to the
+ * other side — the one IntersectionObserver callback this needs to see
+ * (ratio flipping as the sentinel exits the margin-shrunk root) never
+ * fires, because the sentinel never actually leaves it. Verified directly
+ * (not just theorized): instrumented the old effect and confirmed zero
+ * IntersectionObserver callbacks fired after the one at scroll-start, for
+ * every ScrollLink landing tested. A plain scroll listener has no such
+ * blind spot — it re-reads the live position on every tick regardless of
+ * where the animation happens to stop, so landing exactly on the boundary
+ * is resolved the same as landing anywhere else.
+ *
+ * `triggerId` defaults to "company-profile" (the About page's own
+ * section) and is overridable per page — the Fleet page passes
+ * "why-feizmfleet" since it has no company-profile section of its own,
+ * but the same early-switch-to-solid behavior still makes sense once
+ * there's *something* below the Hero to switch on.
+ *
+ * Boundary case: a ScrollLink landing (components/shared/scroll-link.tsx)
+ * puts the trigger section's top edge EXACTLY at the header's bottom edge
+ * via `scroll-margin-top: var(--header-h)` — right on this effect's `<=`
+ * boundary. A 1px epsilon (`SOLID_EPSILON` below) absorbs sub-pixel
+ * rounding from smooth-scroll's fractional scroll positions so that exact
+ * landing always reads unambiguously "solid" and never flickers. Because
+ * this recomputes on every scroll tick (not just at crossing events), the
+ * state updates live *during* the scroll, as soon as that tick's position
+ * satisfies the boundary — not only once the scroll settles.
+ *
+ * Header height: measured live off the `<nav>` itself via ResizeObserver
+ * and published as `--header-h` on `:root` (consumed by
+ * `scroll-mt-[var(--header-h)]` on every scroll target), rather than
+ * hard-coding a pixel offset anywhere. The overlay and solid states share
+ * one fixed-height `<nav>` (only the background/logo/text colors
+ * cross-fade — see below), so there's no "measure it in the solid state
+ * specifically" step needed; the measured height is state-independent by
+ * construction, and would stay correct if a future breakpoint ever made
+ * it not be.
  *
  * Initial state uses `useLayoutEffect` (not `useEffect`) specifically so a
  * mid-page refresh or anchor-link load computes and applies the correct
  * variant before the browser's first paint — avoiding a flash of the wrong
  * state, which a post-paint effect wouldn't fully prevent.
  */
-export function SiteHeader() {
+const SOLID_EPSILON = 1;
+
+export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: string }) {
   const [solid, setSolid] = useState(false);
+  const navRef = useRef<HTMLElement | null>(null);
+  const headerHeightRef = useRef(INITIAL_HEADER_HEIGHT);
   const linkFocusColor = solid ? "#282828" : "var(--fig-color-neutral-0)";
 
+  // Measure the header's real rendered height and publish it as
+  // `--header-h` on :root — see the doc comment above for why this
+  // replaces a hard-coded offset everywhere it would otherwise be needed
+  // (scroll-margin-top on scroll targets, and this component's own
+  // trigger math below).
   useLayoutEffect(() => {
-    const target = document.getElementById("company-profile");
-    if (!target || !target.parentElement) return;
+    const nav = navRef.current;
+    if (!nav) return;
 
-    // Observing company-profile itself doesn't work: it's far taller than
-    // the viewport, so its intersection ratio only crosses 0 (the only
-    // threshold IntersectionObserver fires on by default) when it fully
-    // enters or exits the shrunk root — not at the one specific line this
-    // needs, which sits deep inside the section for most of the scroll
-    // range. A thin 1px sentinel placed at the section's own top edge
-    // (a sibling, not a child, so it isn't affected by the section's own
-    // padding) crosses that line cleanly once per direction instead.
-    // Created here in JS rather than in CompanyProfile.tsx's own markup —
-    // the section itself isn't touched beyond the id already added there.
-    const sentinel = document.createElement("div");
-    sentinel.style.cssText =
-      "position:relative;width:1px;height:1px;margin-top:-1px;pointer-events:none;visibility:hidden;";
-    target.parentElement.insertBefore(sentinel, target);
+    const apply = (height: number) => {
+      headerHeightRef.current = height;
+      document.documentElement.style.setProperty("--header-h", `${height}px`);
+    };
 
+    apply(nav.getBoundingClientRect().height);
+
+    const ro = new ResizeObserver(([entry]) => apply(entry.contentRect.height));
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const target = document.getElementById(triggerId);
+    if (!target) return;
+
+    // target.getBoundingClientRect().top reads the section's own border-box
+    // top edge, unaffected by its own (internal) padding — no sentinel
+    // element needed now that this isn't threshold-crossing-based (see the
+    // doc comment above for why a sentinel + IntersectionObserver used to
+    // be here and why it broke for an exact ScrollLink landing).
     const compute = () => {
-      setSolid(sentinel.getBoundingClientRect().top <= HEADER_HEIGHT);
+      setSolid(target.getBoundingClientRect().top <= headerHeightRef.current + SOLID_EPSILON);
     };
 
     compute();
 
-    const observer = new IntersectionObserver(() => compute(), {
-      rootMargin: `-${HEADER_HEIGHT}px 0px 0px 0px`,
-      threshold: 0,
-    });
-    observer.observe(sentinel);
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        compute();
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", compute);
 
     return () => {
-      observer.disconnect();
-      sentinel.remove();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", compute);
     };
-  }, []);
+  }, [triggerId]);
 
   return (
     <nav
+      ref={navRef}
       className="fixed inset-x-0 top-0 z-50 h-[75px] w-full"
       style={{ fontFamily: "var(--font-hanken-grotesk)" }}
     >
@@ -165,7 +235,7 @@ export function SiteHeader() {
       >
         {/* Logo — cross-faded white/orange SVGs, see comment above */}
         <Link
-          href="/"
+          href="/about-us"
           aria-label="FeizM home"
           className="relative block h-[30px] w-[104px] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{ outlineColor: linkFocusColor }}
