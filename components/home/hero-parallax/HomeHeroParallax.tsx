@@ -79,6 +79,29 @@ export function HomeHeroParallax() {
   const sceneUiRefs = useRef<(HTMLDivElement | null)[]>([]);
   const cardRefs = useRef<HTMLDivElement[][]>([[], [], [], [], []]);
   const alertRef = useRef<HTMLDivElement | null>(null);
+  const bgImageRef = useRef<HTMLImageElement | null>(null);
+  const bgLoadedRef = useRef(false);
+  // In reduced-motion mode the hero draws exactly once (no rAF loop) — if
+  // the image finishes loading after that single draw, nothing would ever
+  // repaint it. The main effect below points this at its own one-shot
+  // redraw whenever it's in the static branch, so the image-load effect
+  // (which doesn't otherwise share closures with it) can trigger that
+  // repaint once loading finishes.
+  const forceStaticRedrawRef = useRef<(() => void) | null>(null);
+
+  // Loaded once on mount, independent of the rAF-driving effect below (so
+  // scrolling in/out of view or a reduced-motion toggle never re-fetches
+  // it). `draw()` falls back to a flat fill until `bgLoadedRef` flips, so
+  // there's no flash of a broken/blank frame while the image loads.
+  useEffect(() => {
+    const img = new window.Image();
+    img.src = "/home-hero/background.png";
+    img.onload = () => {
+      bgLoadedRef.current = true;
+      forceStaticRedrawRef.current?.();
+    };
+    bgImageRef.current = img;
+  }, []);
 
   const [activeScene, setActiveScene] = useState(0);
   // Always false for SSR and the client's first (pre-hydration) render —
@@ -143,8 +166,16 @@ export function HomeHeroParallax() {
     }
 
     function draw(i: number, t: number, now: number) {
-      ctx!.fillStyle = "rgba(14,14,17,1)";
-      ctx!.fillRect(0, 0, STAGE_W, STAGE_H);
+      // Base layer: the supplied background image, replacing the
+      // prototype's flat dark fill — drawn fresh every frame (same as
+      // the fill it replaces), so it still fully clears the previous
+      // frame before each scene redraws on top of it.
+      if (bgLoadedRef.current && bgImageRef.current) {
+        ctx!.drawImage(bgImageRef.current, 0, 0, STAGE_W, STAGE_H);
+      } else {
+        ctx!.fillStyle = "rgba(14,14,17,1)";
+        ctx!.fillRect(0, 0, STAGE_W, STAGE_H);
+      }
       renderers![i](t, now);
     }
 
@@ -194,12 +225,16 @@ export function HomeHeroParallax() {
       const endAt = { i: 0, t: SCENES[0].t1 };
       draw(0, endAt.t, 0);
       applyOverlays(SCENES[0].off + SCENES[0].len, endAt);
+      forceStaticRedrawRef.current = () => draw(0, endAt.t, 0);
       const onResize = () => {
         layout();
         draw(0, endAt.t, 0);
       };
       window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
+      return () => {
+        window.removeEventListener("resize", onResize);
+        forceStaticRedrawRef.current = null;
+      };
     }
 
     if (!inView) return; // gated off-screen — no rAF loop running at all
