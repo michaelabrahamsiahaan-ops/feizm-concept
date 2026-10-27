@@ -25,10 +25,10 @@ export interface SceneDef {
 
 const RAW: Omit<SceneDef, "off" | "len" | "cardStart">[] = [
   { key: "fleet", label: "Fleet Management", t0: 1.2, t1: 5.8, hold: 1.2, cues: [5.25, 5.4, 5.55] },
-  { key: "assets", label: "Assets", t0: 0, t1: 5.9, hold: 1.2, cues: [5.45, 5.6, 5.75] },
-  { key: "video-cloud", label: "Video & Cloud", t0: 0, t1: 6.1, hold: 1.2, cues: [5.65, 5.8, 5.95] },
-  { key: "delivery", label: "Delivery", t0: 0, t1: 5.7, hold: 1.2, cues: [5.15, 5.3, 5.45] },
-  { key: "monitoring", label: "Monitoring", t0: 0, t1: 6.7, hold: 1.6, cues: [6.05, 6.2, 6.35] },
+  { key: "assets", label: "Asset Management", t0: 0, t1: 5.9, hold: 1.2, cues: [5.45, 5.6, 5.75] },
+  { key: "video-cloud", label: "Safety and Surveillance", t0: 0, t1: 6.1, hold: 1.2, cues: [5.65, 5.8, 5.95] },
+  { key: "delivery", label: "Transport Management", t0: 0, t1: 5.7, hold: 1.2, cues: [5.15, 5.3, 5.45] },
+  { key: "monitoring", label: "Device Management", t0: 0, t1: 6.7, hold: 1.6, cues: [6.05, 6.2, 6.35] },
 ];
 
 export const SCENES: SceneDef[] = (() => {

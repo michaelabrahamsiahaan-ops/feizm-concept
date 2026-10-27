@@ -81,3 +81,12 @@ export function MonitoringIcon(props: IconProps) {
 }
 
 export const SCENE_ICONS = [FleetIcon, AssetsIcon, VideoCloudIcon, DeliveryIcon, MonitoringIcon] as const;
+
+/** "See All Services" — node 116:824 ("Chevron right"), NOT an arrow. */
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 12L10 8L6 4" {...stroke} />
+    </svg>
+  );
+}

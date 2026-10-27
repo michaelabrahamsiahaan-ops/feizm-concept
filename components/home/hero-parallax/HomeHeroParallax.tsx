@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { clamp, makePatterns, type Patterns } from "./canvas-draw";
 import { ALERT_ICON_SVG, ALERT_TITLE, SCENE_CARDS } from "./scene-cards-data";
 import { ALERT_CUE_T, ALERT_SCENE_INDEX, SCENES, TOTAL, createRenderers, locate } from "./scene-timeline";
-import { SCENE_ICONS } from "./scene-icons";
+import { ChevronRightIcon, SCENE_ICONS } from "./scene-icons";
 import { H, W } from "./map-data";
 import type { SceneRender } from "./scenes";
 
@@ -375,7 +374,24 @@ export function HomeHeroParallax() {
               role="img"
               aria-hidden="true"
               className="absolute left-0 top-0"
-              style={{ width: STAGE_W, height: STAGE_H }}
+              style={{
+                width: STAGE_W,
+                height: STAGE_H,
+                // Feathers the canvas's own top/bottom ~30px to
+                // transparent, revealing the blurred backdrop underneath
+                // gradually instead of a hard cut. At viewport ratios
+                // other than exactly 1440:796 the canvas is "contain"-fit
+                // (see layout() above) and doesn't reach the pin's own
+                // top/bottom edge — the sharp dot-pattern of the real
+                // scene content was ending in a hard line right where the
+                // blurred backdrop (added to fill that letterbox margin)
+                // began, visible as a thin band along the hero's bottom
+                // edge (reported, with a screenshot circling it) — purely
+                // a sharpness discontinuity, not a color one (the colors
+                // already matched; this is why that didn't fix it).
+                maskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
+              }}
             />
 
             {/* Left-side black gradient scrim — Figma "Home / 01 Hero"'s
@@ -406,6 +422,18 @@ export function HomeHeroParallax() {
               className="pointer-events-none absolute inset-0"
               style={{
                 background: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 6.4%, rgba(0,0,0,0) 49.2%)",
+                // Same top/bottom feather as the canvas above, and for the
+                // same reason: this scrim also ends sharply at the
+                // stage's own top/bottom edge, independent of the canvas
+                // fix — it's a separate DOM layer, so masking the canvas
+                // alone didn't fade this one's edge too. Left part of the
+                // seam that was still visible after the canvas mask
+                // (confirmed by sampling pixels at the boundary: a real
+                // brightness step at x~400-1000, roughly where this scrim
+                // is still strong, nearly absent further right where the
+                // scrim has already faded to transparent).
+                maskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
               }}
             />
 
@@ -485,7 +513,22 @@ export function HomeHeroParallax() {
             {/* ---- Hero UI overlay (depth 0 — never moves), from Figma "Home / 01 Hero" ---- */}
             <div
               className="absolute inset-0 flex flex-col justify-end"
-              style={{ paddingLeft: "var(--fig-spacing-40)", paddingRight: "var(--fig-spacing-40)", paddingBottom: 20, fontFamily: "var(--font-hanken-grotesk)" }}
+              style={{
+                paddingLeft: "var(--fig-spacing-40)",
+                paddingRight: "var(--fig-spacing-40)",
+                // 44px, not 20px (fixed — was a left/right vs top/bottom
+                // mix-up reading Figma's own padding array). Re-measured
+                // directly on "Container" (116:741): its OWN bottom
+                // padding is 40px (token), but Container itself is 4px
+                // SHORTER than the hero's true bottom edge (792 vs the
+                // illustration layer's 796, both at y:0 in a non-auto-
+                // layout root) — so the real gap from the progress bars'
+                // bottom edge to the hero's bottom edge is 40 + 4 = 44px,
+                // confirmed by directly measuring the built page against
+                // this figure (was 24px short, matching 44-20 exactly).
+                paddingBottom: "calc(var(--fig-spacing-40) + 4px)",
+                fontFamily: "var(--font-hanken-grotesk)",
+              }}
             >
               <div className="flex flex-col" style={{ gap: "var(--fig-spacing-32)" }}>
                 <div className="flex flex-col" style={{ gap: "var(--fig-spacing-24)", width: 432 }}>
@@ -497,7 +540,15 @@ export function HomeHeroParallax() {
                   </p>
                 </div>
 
-                <div className="flex items-center" style={{ width: 1351 }}>
+                {/* items-start, not items-center: Figma's row (116:751)
+                    has counterAxisAlignItems "MIN" (top-align), not
+                    centered — "See All Services" (32 tall) shares the
+                    same top edge as the buttons (also 32 tall), not the
+                    center of the full 50-tall row (buttons + gap +
+                    progress track). Centering it against that taller row
+                    was pushing it 9px lower than the buttons' own top —
+                    confirmed by measuring both against the live page. */}
+                <div className="flex items-start" style={{ width: 1351 }}>
                   <div className="flex items-center" style={{ gap: "var(--fig-spacing-16)" }}>
                     {SCENES.map((sc, i) => {
                       const Icon = SCENE_ICONS[i];
@@ -543,7 +594,7 @@ export function HomeHeroParallax() {
                               </span>
                             )}
                           </button>
-                          <div className="relative w-full" style={{ height: 2, backgroundColor: "rgb(50,50,50)" }}>
+                          <div className="relative w-full" style={{ height: 2, backgroundColor: "rgb(51,51,51)" }}>
                             <div
                               ref={(el) => {
                                 progressFillRefs.current[i] = el;
@@ -577,7 +628,7 @@ export function HomeHeroParallax() {
                     }}
                   >
                     See All Services
-                    <ArrowRight size={14} />
+                    <ChevronRightIcon width={16} height={16} />
                   </a>
                 </div>
               </div>
