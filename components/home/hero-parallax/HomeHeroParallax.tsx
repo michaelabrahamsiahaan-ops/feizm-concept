@@ -314,7 +314,25 @@ export function HomeHeroParallax() {
           style={{
             ...(reducedMotion
               ? { position: "relative", width: "100%", aspectRatio: `${STAGE_W} / ${STAGE_H}` }
-              : { position: "sticky", top: 0, width: "100%", height: "100vh" }),
+              : // Ported from the prototype's own `.pin` exactly: `100svh`
+                // (small viewport height), not `100vh`. `vh` resolves
+                // against the browser's LARGEST possible viewport — on a
+                // real browser with a collapsible toolbar, that's taller
+                // than what's actually visible until the toolbar hides,
+                // so a sticky `height:100vh` element can end slightly
+                // ABOVE the true bottom of the visible viewport, exposing
+                // the page's own (white) background in a strip below it.
+                // `svh` always matches the viewport as currently shown,
+                // which is what a `position: sticky` element needs here.
+                // `env(safe-area-inset-top)` is the same unmodified
+                // prototype value (0 on a device with no notch/inset; a
+                // non-zero value only on devices that have one).
+                {
+                  position: "sticky",
+                  top: "env(safe-area-inset-top, 0px)",
+                  width: "100%",
+                  height: "calc(100svh - env(safe-area-inset-top, 0px))",
+                }),
             backgroundColor: "#0E0E11",
           }}
         >
