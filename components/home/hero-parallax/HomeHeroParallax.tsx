@@ -451,7 +451,7 @@ export function HomeHeroParallax() {
                       const Icon = SCENE_ICONS[i];
                       const active = i === activeScene;
                       return (
-                        <div key={sc.key} className="flex flex-col items-stretch" style={{ gap: 4 }}>
+                        <div key={sc.key} className="flex flex-col items-stretch" style={{ gap: "var(--fig-spacing-16)" }}>
                           <button
                             type="button"
                             onClick={() => scrollToScene(i)}
