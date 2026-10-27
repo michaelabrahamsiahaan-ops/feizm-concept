@@ -326,6 +326,37 @@ export function HomeHeroParallax() {
               style={{ width: STAGE_W, height: STAGE_H }}
             />
 
+            {/* Left-side black gradient scrim — Figma "Home / 01 Hero"'s
+                own "Container" node (the same frame that holds the
+                headline/buttons below, not a separate overlay layer in
+                Figma — same "Container owns both the gradient fill AND
+                the text" construction as Hero.tsx/FleetHero.tsx) has a
+                GRADIENT_LINEAR fill. Its raw gradientTransform matrix
+                implies a rotation, and hand-decoding it was unreliable
+                (same conclusion reached for every other gradient in this
+                project) — pixel-sampled the exported Container PNG's
+                alpha channel instead (every 2px along a text-free row,
+                checked against multiple rows to confirm it's a clean
+                horizontal gradient, not diagonal): flat opaque black
+                from 0% to 6.4% of the hero's width, then a linear fade
+                down to fully transparent by 49.2%, flat transparent for
+                the remaining right half. Darkens the illustration behind
+                the headline/button column specifically — this is what
+                was missing when the floating cards' white dots read as
+                fighting with the headline text after the background
+                image swap (see prior conversation turn). Sits above the
+                canvas/cards (matching Figma's own stacking: the
+                illustration frame comes before Container, so Container's
+                fill paints over it) but below the actual UI content
+                further down, which stays fully undimmed. */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 6.4%, rgba(0,0,0,0) 49.2%)",
+              }}
+            />
+
             {/* Per-scene floating feature cards — ported 1:1 from the prototype's #ui0..#ui4, see scene-cards-data.ts */}
             {SCENE_CARDS.map((cards, sceneIdx) => (
               <div
