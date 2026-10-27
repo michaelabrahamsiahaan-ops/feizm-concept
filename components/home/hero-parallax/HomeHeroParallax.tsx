@@ -311,11 +311,27 @@ export function HomeHeroParallax() {
         <div
           ref={pinRef}
           className="w-full overflow-hidden"
-          style={
-            reducedMotion
-              ? { position: "relative", width: "100%", aspectRatio: `${STAGE_W} / ${STAGE_H}`, backgroundColor: "#0E0E11" }
-              : { position: "sticky", top: 0, width: "100%", height: "100vh", backgroundColor: "#0E0E11" }
-          }
+          style={{
+            ...(reducedMotion
+              ? { position: "relative", width: "100%", aspectRatio: `${STAGE_W} / ${STAGE_H}` }
+              : { position: "sticky", top: 0, width: "100%", height: "100vh" }),
+            // The stage below is "contain"-fit (same letterboxing the
+            // prototype's own layout() does: scaled to fit without
+            // cropping, centered, so at any viewport ratio other than
+            // 1440:796 there's a margin on one axis outside the scaled
+            // stage). That margin used to be invisible because the
+            // canvas's own flat #0E0E11 fill matched this div's
+            // background exactly; now that the canvas draws the supplied
+            // image instead, a flat color there reads as a visible seam
+            // (reported: a black strip at the top of the hero). Covering
+            // this div with the same image (background-size: cover, not
+            // contain) means the letterbox margin shows a cropped edge of
+            // the same artwork instead of a mismatched flat color.
+            backgroundColor: "#0E0E11",
+            backgroundImage: "url(/home-hero/background.png)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
         >
           <div ref={stageRef} className="absolute left-0 top-0" style={{ width: STAGE_W, height: STAGE_H, transformOrigin: "0 0" }}>
             <canvas
