@@ -1,0 +1,671 @@
+<title>Feizm Scroll Hero</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: a tall scroll section whose sticky viewport holds the 1440×796 stage (contain-fit); scroll position scrubs Scenes 1–5 in sequence. Single dark look. */
+:root {
+  --bg: #0E0E11;
+  --surface: #18181D;
+  --line: #2C2C33;
+  --fg: #F5F5F3;
+  --accent-soft: rgba(255, 107, 0, 0.16);
+  --alert: #D92D20;
+  --alert-soft: #FFE3E0;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--font-body); }
+
+.scrolly { position: relative; height: 1100vh; }
+.pin {
+  position: sticky; top: env(safe-area-inset-top, 0px);
+  height: calc(100svh - env(safe-area-inset-top, 0px));
+  overflow: hidden; background: var(--bg);
+}
+.stage { position: absolute; left: 0; top: 0; width: 1440px; height: 796px; transform-origin: 0 0; }
+.stage canvas { position: absolute; left: 0; top: 0; width: 1440px; height: 796px; }
+.scene-ui { position: absolute; inset: 0; will-change: transform; }
+
+.card {
+  position: absolute; left: 1030px; width: 340px; height: 60px; box-sizing: border-box; padding: 0 16px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  opacity: 0; transform: translateY(12px);
+  transition: opacity 300ms cubic-bezier(.2,.7,.2,1), transform 300ms cubic-bezier(.2,.7,.2,1);
+}
+.card .ic { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.card .tx { font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--fg); }
+.alert {
+  position: absolute; left: 848px; top: 540px; width: 320px; box-sizing: border-box; padding: 14px 16px;
+  display: flex; align-items: flex-start; gap: 12px;
+  background: var(--alert); color: #FFFFFF; border-radius: 12px; box-shadow: 0 10px 30px rgba(217, 45, 32, 0.35);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 250ms cubic-bezier(.2,.7,.2,1), transform 250ms cubic-bezier(.2,.7,.2,1);
+}
+.alert .t1 { font-size: 15px; font-weight: 700; }
+.alert .t2 { font-family: var(--font-mono); font-size: 12px; color: var(--alert-soft); }
+.in { opacity: 1; transform: translateY(0); }
+
+.static .scrolly { height: auto; }
+.static .pin { position: relative; height: auto; aspect-ratio: 1440 / 796; max-width: 100%; }
+.static .card, .static .alert { transition: none; }
+</style>
+
+<section class="scrolly" id="scrolly" aria-label="Feizm hero">
+  <div class="pin" id="pin">
+    <div class="stage" id="stage">
+      <canvas id="cv" role="img" aria-label="Cerita Feizm dari dot di peta Singapura. Saat di-scroll: kendaraan di jalan dengan fitur fleet, pelacakan aset di peta, sinyal ke cloud dan storage, rute pengiriman dari titik awal ke akhir, lalu insiden di rute dengan alert dan fitur monitoring."></canvas>
+
+      <div class="scene-ui" id="ui0">
+        <div class="card" style="top: 182px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><span class="tx">Real-time GPS Tracking</span></div>
+        <div class="card" style="top: 256px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M3.5 10h6M14.5 10h6M12 14.5V21"/></svg></span><span class="tx">Driver Monitoring &amp; Safety</span></div>
+        <div class="card" style="top: 330px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.2"/></svg></span><span class="tx">Ultra-Accurate Engine Diagnostics</span></div>
+      </div>
+
+      <div class="scene-ui" id="ui1">
+        <div class="card" style="top: 182px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg></span><span class="tx">Real-time Asset Tracking &amp; Location</span></div>
+        <div class="card" style="top: 256px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0z"/></svg></span><span class="tx">Asset Condition &amp; Environmental Monitoring</span></div>
+        <div class="card" style="top: 330px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5v14M7.5 5v14M11 5v14M15 5v14M17.5 5v14M20 5v14"/></svg></span><span class="tx">Automated Asset Registration &amp; Attributes</span></div>
+      </div>
+
+      <div class="scene-ui" id="ui2">
+        <div class="card" style="top: 182px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg></span><span class="tx">Proof of Incidents, Cloud Storage &amp; Warnings</span></div>
+        <div class="card" style="top: 256px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="12" r="1.2"/><path d="M12 13v8"/></svg></span><span class="tx">Telematics &amp; GPS Integration</span></div>
+        <div class="card" style="top: 330px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg></span><span class="tx">Driver Behavior Retraining</span></div>
+      </div>
+
+      <div class="scene-ui" id="ui3">
+        <div class="card" style="top: 182px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 13l2 2 4-4"/></svg></span><span class="tx">Online Job Planning &amp; Assignment</span></div>
+        <div class="card" style="top: 256px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h11v9H2zM13 10h4l3 3v3h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg></span><span class="tx">Real-time Delivery Status &amp; Notifications</span></div>
+        <div class="card" style="top: 330px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span><span class="tx">Telematics Integration</span></div>
+      </div>
+
+      <div class="alert" id="alert">
+        <svg style="flex-shrink: 0; margin-top: 1px" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4.5M12 17.5h.01"/></svg>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span class="t1">Harsh braking detected</span>
+          <span class="t2">[Vehicle ID] · [Time] · [Location]</span>
+        </div>
+      </div>
+
+      <div class="scene-ui" id="ui4">
+        <div class="card" style="top: 182px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></span><span class="tx">Alarms &amp; Event Management</span></div>
+        <div class="card" style="top: 256px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><span class="tx">Telemetry Data Collection &amp; Processing</span></div>
+        <div class="card" style="top: 330px"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8A3D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M10 10h4v4h-4zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg></span><span class="tx">Centralized Device Management</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var W = 1440, H = 796;
+  var BG = [14, 14, 17], GRID = [42, 42, 49], WHITE = [245, 245, 243], LAND = [251, 251, 251], OR = [255, 107, 0];
+  var ORANGE = '#FF6B00', RED = '#D92D20';
+
+  // ---------- Shared data: Singapore land dots from Peta_singapore.svg (row y -> segments, step 8) ----------
+  var MAP = '148:652-700,716|156:640-688,704-728|164:628-748|172:616-760|180:604-772|188:592-776|196:428,580-772|204:408-464,568-784|212:396-468,556-788|220:384-480,552-792|228:380-500,524-532,548-796|236:368-808|244:340-804|252:320-800,832-856,1288-1304,1320-1344|260:316-796,836-876,996-1012,1212-1220,1284-1364|268:312-888,984-1032,1208-1224,1256-1376|276:308-900,924-940,988-1036,1204-1236,1260-1380|284:304-896,912-944,1008-1144,1208-1240,1256-1392|292:300-956,1020-1148,1212-1244,1260-1396|300:304-968,1032-1144,1208-1240,1256-1400|308:284-972,1044-1148,1252-1396|316:280-984,1056-1104,1256-1392|324:284-988,1060-1092,1252,1276-1388|332:280-984,1232,1280-1392|340:276-996,1284-1388|348:280-1000,1136-1144,1288-1384|356:276-1004,1108-1164,1300-1388|364:272-1016,1104-1168,1240,1304-1384|372:268-1028,1092-1172,1308-1364|380:264-1176,1312-1344|388:260-1180,1316-1324|396:256-1184|404:244-1196|412:240-1208|420:236-1228|428:232-1248|436:228-1260|444:224-1256,1376|452:220-1260,1284|460:216-1256|468:204-1252|476:208-1248|484:204-1244|492:208-1240|500:204-1236|508:200-1232|516:196-1228|524:192-1224|532:188-1260|540:184-1256|548:180-1236,1260|556:184-232,248-1080,1136-1200|564:180-204,244-1060,1172-1180|572:176-200,240-248,264-320,336-1024|580:172-204,244,260-292,308-324,340-356,380-396,412,436-996|588:168-216,256-288,312-320,336-352,384-392,408-424,448-968|596:164-220,252-292,316-324,340-348,412-428,476-940|604:160-224,264-304,320,504-512,544-912|612:164-228,276-300,548-900|620:168-232,288,400-432,544-880|628:172-236,332-356,396-436,556-868|636:168-240,320-352,400-440,520-528,568-856|644:164-236,308-348,372-380,404-452,516-540,572-852|652:160-216,296-336,368-384,408-464,520-552,568-576,600-832|660:148-212,284-332,364-476,532-572,604-828|668:144-216,272-480,552-568,608-824|676:140-212,268-436,460,564,604-628,644-780,796-812|684:152-192,272-328,344-384,408-448,600-616,648-720,752-776,808|692:148-172,276-324,356-396,428-436,596-612,692-708,764-772|700:152-184,280-328,360-408,592-608|708:148-164,284-332,364-404,596-604,668-700|716:152,288-336,368-384,680-712|724:140-148,292-340,372,692-764|732:136-152,296-344,696-760|740:140-156,300-340,708-756|748:128-160,288-344,720-744|756:148-164,292-348,548,732-740|764:160,296-336,504,544-552|772:308-332,484-564|780:160,312-320,504-536,552-568|788:316,532-556,572-580|796:152,312,576-584|804:140|812:144|820:172|828:200,432-440,536|836:412-452,532-548,580-588|844:408-456,536-592|852:412-460,540-588|860:536-544,560-592|868:540,580|876:576|884:572';
+  var land = [], landSet = {};
+  MAP.split('|').forEach(function (row) {
+    var p = row.split(':'), y = +p[0];
+    p[1].split(',').forEach(function (seg) {
+      var ab = seg.split('-'), a = +ab[0], b = ab.length > 1 ? +ab[1] : a;
+      for (var x = a; x <= b; x += 8) { land.push(x, y); landSet[x * 10000 + y] = 1; }
+    });
+  });
+  function run(arr, x0, x1, y) { for (var x = x0; x <= x1; x += 8) arr.push([x, y]); }
+
+  // ---------- Shared drawing ----------
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var stage = document.getElementById('stage'), pin = document.getElementById('pin'), scrolly = document.getElementById('scrolly');
+  var pat = {};
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function easeIn(t) { return t * t * t; }
+  function easeOutQ(u) { return 1 - (1 - u) * (1 - u); }
+  function backOut(t) { var c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); }
+  function rgb(c, a) { return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + a + ')'; }
+  function mix(c1, c2, t) { return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)]; }
+  function oa(a) { return 'rgba(255,107,0,' + a + ')'; }
+  function ra(a) { return 'rgba(217,45,32,' + a + ')'; }
+  function dot(x, y, r, fs) { if (!(r > 0)) return; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fs; ctx.fill(); }
+  function pulse(now, period) { return (now / 1000 % period) / period; } // ambient, real-time, independent of scroll
+
+  function makePattern(w, h, pts, r) {
+    var t = document.createElement('canvas'); t.width = w; t.height = h;
+    var c = t.getContext('2d'); c.fillStyle = rgb(GRID, 1);
+    pts.forEach(function (p) { c.beginPath(); c.arc(p[0], p[1], r, 0, Math.PI * 2); c.fill(); });
+    return ctx.createPattern(t, 'repeat');
+  }
+  function makePatterns() {
+    pat.sea126 = makePattern(72, 144, [[36, 36], [0, 108], [72, 108]], 12.6);
+    pat.sea135 = makePattern(72, 144, [[36, 36], [0, 108], [72, 108]], 13.5);
+    pat.l2 = makePattern(56, 112, [[28, 28], [0, 84], [56, 84]], 8.8);
+  }
+  function fillPattern(p, m) { p.setTransform(new DOMMatrix(m)); ctx.fillStyle = p; ctx.fillRect(0, -400, W, H + 800); }
+  function fadeLeft(width, a) {
+    if (a <= 0) return;
+    var g = ctx.createLinearGradient(0, 0, width, 0);
+    g.addColorStop(0, rgb(BG, a)); g.addColorStop(0.6, rgb(BG, 0.85 * a)); g.addColorStop(1, rgb(BG, 0));
+    ctx.fillStyle = g; ctx.fillRect(0, -400, width, H + 800);
+  }
+  function landDots(s, ox, oy, rl, alpha) {
+    var m = rl + 2; ctx.fillStyle = rgb(LAND, alpha); ctx.beginPath();
+    for (var i = 0; i < land.length; i += 2) {
+      var lx = ox + s * land[i], ly = oy + s * land[i + 1];
+      if (lx < -m || lx > W + m || ly < -m || ly > H + m) continue;
+      ctx.moveTo(lx + rl, ly); ctx.arc(lx, ly, rl, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+  function dotted(pts, w, gap, color) {
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.setLineDash([0, gap]); ctx.lineCap = 'round'; ctx.lineWidth = w; ctx.strokeStyle = color; ctx.stroke(); ctx.setLineDash([]);
+  }
+  function dottedArc(cx, cy, r, a0, a1, w, gap, alpha) {
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a1);
+    ctx.setLineDash([0, gap]); ctx.lineCap = 'round'; ctx.lineWidth = w; ctx.strokeStyle = oa(alpha); ctx.stroke(); ctx.setLineDash([]);
+  }
+  function ring(x, y, r, ph, color, a) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.strokeStyle = color(a * (1 - ph)); ctx.lineWidth = 2; ctx.stroke(); }
+  function core(x, y, r, sw) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = ORANGE; ctx.fill(); ctx.lineWidth = sw; ctx.strokeStyle = rgb(BG, 1); ctx.stroke(); }
+  function brackets(x, y, half, arm, alpha) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = ORANGE; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (c) {
+      var cx = x + c[0] * half, cy = y + c[1] * half;
+      ctx.beginPath(); ctx.moveTo(cx, cy - c[1] * arm); ctx.lineTo(cx, cy); ctx.lineTo(cx - c[0] * arm, cy); ctx.stroke();
+    });
+    ctx.restore();
+  }
+  function pin_(x, y, k, alpha) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(k, k); ctx.globalAlpha = alpha;
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-7, -11, -13, -18, -13, -25); ctx.arc(0, -25, 13, Math.PI, 0); ctx.bezierCurveTo(13, -18, 7, -11, 0, 0);
+    ctx.closePath(); ctx.fillStyle = ORANGE; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = rgb(BG, 1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -25, 4.5, 0, Math.PI * 2); ctx.fillStyle = rgb(BG, 1); ctx.fill();
+    ctx.restore();
+  }
+  var TRAIL_A = [0.9, 0.7, 0.5, 0.3, 0.15];
+
+  // ---------- Scene 1 · Fleet ----------
+  var scene1 = (function () {
+    var V = { x: 748, y: 452 }, P0 = { x: 974, y: 352.8 }, P1 = { x: 738, y: 450 }, S0 = 0.7, S1 = 4.5;
+    function vehicle(x, y, r, haloK, now) {
+      dot(x, y, lerp(44.8, 56, haloK), oa(0.08));
+      dot(x, y, lerp(26.6, 32, haloK), oa(0.16));
+      var ph = pulse(now, 1.6); ring(x, y, r + ph * 60, ph, oa, 0.35);
+      core(x, y, r, 3);
+    }
+    return function (t, now) {
+      if (t < 3.0) {
+        var e = ease(clamp((t - 2.0) / 1.0, 0, 1));
+        var s = S0 * Math.pow(S1 / S0, e);
+        var P = { x: lerp(P0.x, P1.x, e), y: lerp(P0.y, P1.y, e) };
+        var ox = P.x - s * V.x, oy = P.y - s * V.y;
+        ctx.save(); ctx.globalAlpha = clamp(t / 0.6, 0, 1); fillPattern(pat.sea126, [s / 9, 0, 0, s / 9, ox, oy]); ctx.restore();
+        var reveal = (t / 0.9) * 1400, rl = lerp(2.1, 6.5, e), m = rl + 2;
+        if (reveal > 1600) landDots(s, ox, oy, rl, 1);
+        else for (var i = 0; i < land.length; i += 2) {
+          var nx = land[i], ny = land[i + 1], sx = ox + s * nx, sy = oy + s * ny;
+          if (sx < -m || sx > W + m || sy < -m || sy > H + m) continue;
+          var a = clamp((reveal - Math.sqrt((nx - V.x) * (nx - V.x) + (ny - V.y) * (ny - V.y))) / 120, 0, 1);
+          if (a > 0) dot(sx, sy, rl, rgb(LAND, a));
+        }
+        for (var k = 1; k <= 5; k++) {
+          var ta = clamp((t - 0.8 - (5 - k) * 0.08) / 0.15, 0, 1);
+          if (ta > 0) dot(ox + s * (V.x - 8 * k), oy + s * V.y, lerp(2.52, 7.5, e), oa(TRAIL_A[k - 1] * ta));
+        }
+        var pop = clamp((t - 0.5) / 0.35, 0, 1);
+        if (pop > 0) { ctx.save(); ctx.globalAlpha = Math.min(1, pop * 2); vehicle(P.x, P.y, lerp(11.2, 13, e) * backOut(pop), e, now); ctx.restore(); }
+        return;
+      }
+      var kc = ease(clamp((t - 3.0) / 0.6, 0, 1));
+      for (var j = 0; j * 36 + 18 <= H + 20; j++) {
+        var y = 18 + 36 * j, x0 = (j % 2 === 0) ? 18 : 0, road = (y === 414 || y === 450 || y === 486);
+        for (var x = x0; x <= W + 20; x += 36) {
+          var isLand = !!landSet[(V.x + (x - P1.x) / S1) * 10000 + (V.y + (y - P1.y) / S1)];
+          dot(x, y, lerp(isLand ? 6.5 : 6.3, road ? 7.5 : 5.5, kc), rgb(mix(isLand ? LAND : GRID, road ? WHITE : GRID, kc), 1));
+        }
+      }
+      fadeLeft(760, kc);
+      var hp = clamp((t - 3.6) / 0.35, 0, 4), n = Math.min(Math.floor(hp), 3), f = hp >= 4 ? 1 : ease(hp - Math.floor(hp));
+      var vx = 738 + 36 * (n + f), cell = 738 + 36 * Math.floor(Math.min(hp, 4));
+      [212, 286, 360].forEach(function (cy, i) {
+        var p = ease(clamp((t - 5.1 - 0.15 * i) / 0.2, 0, 1));
+        if (p > 0) dotted([[882, 450], [lerp(882, 1030, p), lerp(450, cy, p)]], 2.5, 7, ORANGE);
+      });
+      for (var q = 1; q <= 5; q++) dot(cell - 36 * q, 450, 7.5, oa(TRAIL_A[q - 1]));
+      vehicle(vx, 450, 13, 1, now);
+    };
+  })();
+
+  // ---------- Scene 2 · Assets ----------
+  var scene2 = (function () {
+    var R = [];
+    run(R, 300, 436, 500); R.push([440, 492], [444, 484], [448, 476], [452, 468]);
+    run(R, 460, 596, 468); R.push([600, 460]); run(R, 608, 784, 460);
+    R.push([788, 452], [792, 444], [796, 436], [800, 428]); run(R, 808, 976, 428);
+    R.push([980, 436], [984, 444], [988, 452], [992, 460], [996, 468]); run(R, 1004, 1164, 468);
+    R.push([1168, 476], [1172, 484], [1176, 492], [1180, 500]);
+    var I0 = 17, I1 = 40;
+    var S_ST = 4.5, P_ST = { x: 882, y: 450 }, S_A = 0.556, L_A = 633.6, T_A = 152.0, S_B = 0.4, L_B = 468.8, T_B = 220.8;
+    var V0 = { x: R[I0][0], y: R[I0][1] }, P_A = { x: L_A + S_A * V0.x, y: T_A + S_A * V0.y };
+    function camera(t) {
+      if (t < 1.1) return { s: S_ST, ox: P_ST.x - S_ST * V0.x, oy: P_ST.y - S_ST * V0.y, z: 0, d: 0 };
+      if (t < 2.5) {
+        var e = ease((t - 1.1) / 1.4), s = S_ST * Math.pow(S_A / S_ST, e);
+        var P = { x: lerp(P_ST.x, P_A.x, e), y: lerp(P_ST.y, P_A.y, e) };
+        return { s: s, ox: P.x - s * V0.x, oy: P.y - s * V0.y, z: e, d: 0 };
+      }
+      var d = ease(clamp((t - 4.4) / 1.0, 0, 1));
+      return { s: lerp(S_A, S_B, d), ox: lerp(L_A, L_B, d), oy: lerp(T_A, T_B, d), z: 1, d: d };
+    }
+    return function (t, now) {
+      var cam = camera(t), s = cam.s, ox = cam.ox, oy = cam.oy;
+      if (t < 1.1) {
+        var kc = ease(clamp((t - 0.6) / 0.5, 0, 1));
+        var nx0 = Math.floor((-ox) / s / 8) * 8 - 8, nx1 = Math.ceil((W - ox) / s / 8) * 8 + 8;
+        var ny0 = Math.floor((-oy) / s / 8) * 8 - 8, ny1 = Math.ceil((H - oy) / s / 8) * 8 + 8;
+        for (var ny = ny0; ny <= ny1; ny += 8) {
+          var row = ((ny - 148) / 8) % 2 === 0 ? 4 : 0, road = Math.abs(ny - V0.y) <= 8;
+          for (var nx = nx0 - ((nx0 - row) % 8 + 8) % 8; nx <= nx1; nx += 8) {
+            var isLand = !!landSet[nx * 10000 + ny];
+            dot(ox + s * nx, oy + s * ny, lerp(road ? 7.5 : 5.5, isLand ? 6.5 : 1.5 * s, kc), rgb(mix(road ? WHITE : GRID, isLand ? LAND : GRID, kc), 1));
+          }
+        }
+        fadeLeft(760, 1 - kc);
+        for (var q = 1; q <= 5; q++) dot(882 - 36 * q, 450, 7.5, oa(TRAIL_A[q - 1] * (1 - kc)));
+      } else {
+        fillPattern(pat.sea135, [s / 9, 0, 0, s / 9, ox, oy]);
+        landDots(s, ox, oy, cam.z < 1 ? lerp(6.5, 3 * S_A, cam.z) : 3 * s, 1);
+      }
+      var rA = clamp((t - 2.4) / 0.4, 0, 1);
+      var f0 = clamp((t - 2.9) / 1.4, 0, 1), rp = I0 + (I1 - I0) * ease(f0), vi = Math.floor(rp);
+      if (rA > 0) for (var j = 0; j < R.length; j++) {
+        var a = j <= vi ? lerp(clamp(1 - Math.max(0, vi - j - 4) / 18, 0.2, 1), 1, cam.d) : lerp(0.2, 0.3, cam.d);
+        dot(ox + s * R[j][0], oy + s * R[j][1], 3.6 * s, oa(a * rA));
+      }
+      var fi = rp - vi, pa = R[vi], pb = R[Math.min(vi + 1, R.length - 1)];
+      var vx = ox + s * lerp(pa[0], pb[0], fi), vy = oy + s * lerp(pa[1], pb[1], fi);
+      var vr = t < 1.1 ? 13 : (cam.z < 1 ? lerp(13, 12.5, cam.z) : lerp(12.5, 9, cam.d));
+      [212, 286, 360].forEach(function (cy, k) {
+        var p = ease(clamp((t - 5.3 - 0.15 * k) / 0.2, 0, 1));
+        if (p > 0) dotted([[vx, vy], [lerp(vx, 1030, p), lerp(vy, cy, p)]], 2.5, 7, ORANGE);
+      });
+      var halo = t < 1.1 ? 0 : (cam.z < 1 ? cam.z : 1);
+      dot(vx, vy, lerp(56, 66.7, halo) * (1 - cam.d), oa(0.07 * (1 - cam.d)));
+      dot(vx, vy, lerp(lerp(32, 30.6, halo), 22, cam.d), oa(0.16));
+      var ph = pulse(now, 1.6); ring(vx, vy, vr + ph * 50, ph, oa, 0.35);
+      core(vx, vy, vr, 2.5);
+      var lk = clamp((t - 2.5) / 0.4, 0, 1);
+      if (lk > 0) {
+        var half = lerp(34, 24, cam.d) * lerp(1.4, 1, backOut(lk));
+        brackets(vx, vy, half, half * 0.55, Math.min(1, lk * 2));
+      }
+    };
+  })();
+
+  // ---------- Scene 3 · Video & Cloud ----------
+  var scene3 = (function () {
+    var R = [];
+    run(R, 300, 436, 500); R.push([440, 492], [444, 484], [448, 476], [452, 468]);
+    run(R, 460, 596, 468); R.push([600, 460]); run(R, 608, 784, 460);
+    R.push([788, 452], [792, 444], [796, 436], [800, 428]); run(R, 808, 976, 428);
+    R.push([980, 436], [984, 444], [988, 452], [992, 460], [996, 468]); run(R, 1004, 1164, 468);
+    R.push([1168, 476], [1172, 484], [1176, 492], [1180, 500]);
+    var VI = 40, V = { x: 600, y: 460 };
+    var S_A = 0.4, P_A = { x: 708.8, y: 404.8 }, S_ST = 4.5, P_ST = { x: 702, y: 450 };
+    var CLOUD = [], STORE = [];
+    function inC(x, y, cx, cy, r) { return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r; }
+    function inE(x, y, cx, cy, rx, ry) { var a = (x - cx) / rx, b = (y - cy) / ry; return a * a + b * b <= 1; }
+    function band(x, y, y0) { var u = (x - 805) / 75; if (Math.abs(u) > 1) return false; return Math.abs(y - (y0 + 20 * Math.sqrt(1 - u * u))) < 5; }
+    for (var m = 0; m < 30; m++) {
+      [[7 + 28 * m, 7], [21 + 28 * m, 0]].forEach(function (r) {
+        var y = r[0];
+        for (var x = r[1]; x <= W; x += 14) {
+          if (inC(x, y, 720, 320, 65) || inC(x, y, 805, 275, 88) || inC(x, y, 890, 320, 65) || (x >= 720 && x <= 890 && y >= 320 && y <= 385)) CLOUD.push({ x: x, y: y, d: Math.hypot(x - 805, y - 310) });
+          var top = inE(x, y, 805, 472, 75, 20) && y < 472;
+          var body = (x >= 730 && x <= 880 && y >= 472 && y <= 612) || (inE(x, y, 805, 612, 75, 20) && y > 612);
+          if ((top || body) && !band(x, y, 518) && !band(x, y, 565)) STORE.push({ x: x, y: y, d: Math.hypot(x - 805, y - 542), a: top ? 0.45 : 1 });
+        }
+      });
+    }
+    function quad(p0, c, p1, n, upTo) {
+      var out = [];
+      for (var i = 0; i <= n * upTo; i++) {
+        var u = i / n;
+        out.push([(1 - u) * (1 - u) * p0[0] + 2 * (1 - u) * u * c[0] + u * u * p1[0], (1 - u) * (1 - u) * p0[1] + 2 * (1 - u) * u * c[1] + u * u * p1[1]]);
+      }
+      return out;
+    }
+    function streetWorld(t) {
+      var e = ease(clamp(t / 1.2, 0, 1)), s = S_A * Math.pow(S_ST / S_A, e);
+      var P = { x: lerp(P_A.x, P_ST.x, e), y: lerp(P_A.y, P_ST.y, e) };
+      var ox = P.x - s * V.x, oy = P.y - s * V.y;
+      if (t < 1.2) {
+        fillPattern(pat.sea135, [s / 9, 0, 0, s / 9, ox, oy]);
+        landDots(s, ox, oy, lerp(3 * S_A, 6.5, e), 1);
+        var rA = 1 - clamp(t / 0.6, 0, 1);
+        if (rA > 0) for (var j = 0; j < R.length; j++) dot(ox + s * R[j][0], oy + s * R[j][1], 3.6 * s, oa((j <= VI ? 1 : 0.3) * rA));
+        return;
+      }
+      var kc = ease(clamp((t - 1.2) / 0.5, 0, 1));
+      var nx0 = Math.floor((-ox) / s / 8) * 8 - 8, nx1 = Math.ceil((W - ox) / s / 8) * 8 + 8;
+      var ny0 = Math.floor((-oy - 400) / s / 8) * 8 - 8, ny1 = Math.ceil((H - oy) / s / 8) * 8 + 8;
+      for (var ny = ny0; ny <= ny1; ny += 8) {
+        var row = ((ny - 148) / 8) % 2 === 0 ? 4 : 0, road = Math.abs(ny - V.y) <= 8;
+        for (var nx = nx0 - ((nx0 - row) % 8 + 8) % 8; nx <= nx1; nx += 8) {
+          var isLand = !!landSet[nx * 10000 + ny];
+          dot(ox + s * nx, oy + s * ny, lerp(isLand ? 6.5 : 6.75, road ? 7.5 : 5.5, kc), rgb(mix(isLand ? LAND : GRID, road ? WHITE : GRID, kc), 1));
+        }
+      }
+      fadeLeft(680, kc);
+      var hop = ease(clamp((t - 1.7) / 0.35, 0, 1)), cell = 702 + (hop >= 1 ? 36 : 0), TA = [0.75, 0.5, 0.3, 0.15];
+      for (var q = 1; q <= 4; q++) dot(cell - 36 * q, 450, 7.5, oa(TA[q - 1] * kc));
+      var A0 = -110 * Math.PI / 180, A1 = -20 * Math.PI / 180, RR = [70, 115, 160], AL = [1, 0.6, 0.3];
+      RR.forEach(function (r, i) {
+        var lt = t - 1.9 - 0.1 * i;
+        if (lt < 0) return;
+        var cyc = 0.85, n = Math.floor(lt / cyc), u = (lt % cyc) / cyc;
+        var grow = n >= 2 ? 1 : easeOutQ(u), al = n >= 2 ? 1 : (u < 0.25 ? u / 0.25 : 1 - (u - 0.25) / 0.75 * 0.6);
+        dottedArc(738, 450, r * (0.75 + 0.25 * grow), A0, A1, 8, 15, AL[i] * al);
+      });
+    }
+    function vehicleAt(t) {
+      if (t < 1.7) { var e = ease(clamp(t / 1.2, 0, 1)); return { x: lerp(P_A.x, P_ST.x, e), y: lerp(P_A.y, P_ST.y, e), r: lerp(9, 13, e), h: lerp(22, 32, e) }; }
+      var hop = ease(clamp((t - 1.7) / 0.35, 0, 1)), sx = 702 + 36 * hop, k = ease(clamp((t - 3.6) / 0.6, 0, 1));
+      return { x: lerp(sx, 609, k), y: lerp(450, 623, k), r: lerp(13, 9, k), h: lerp(32, 22, k) };
+    }
+    return function (t, now) {
+      var k = ease(clamp((t - 3.6) / 0.6, 0, 1));
+      if (k < 1) { ctx.save(); ctx.globalAlpha = 1 - k; ctx.translate(0, 300 * k); streetWorld(t); ctx.restore(); }
+      if (k > 0) { ctx.save(); ctx.globalAlpha = k; ctx.translate(0, -220 * (1 - k)); fillPattern(pat.l2, [0.25, 0, 0, 0.25, 0, 0]); fadeLeft(640, 1); ctx.restore(); }
+      var cg = clamp((t - 4.2) / 0.7, 0, 1);
+      if (cg > 0) CLOUD.forEach(function (p) { var a = clamp((cg * 175 - p.d) / 18, 0, 1); if (a > 0) dot(p.x, p.y, 3.6 * backOut(a), rgb(LAND, 1)); });
+      var sc = clamp((t - 4.3) / 0.5, 0, 1);
+      if (sc > 0) { var pts = quad([640, 548], [680, 465], [735, 395], 40, sc); if (pts.length > 1) dotted(pts, 6, 12, oa(0.6)); }
+      var ar = clamp((t - 4.9) / 0.3, 0, 1);
+      if (ar > 0) {
+        dotted([[805, 400], [805, 400 + 48 * ar]], 6, 12, ORANGE);
+        if (ar >= 1) { ctx.beginPath(); ctx.moveTo(795, 442); ctx.lineTo(805, 454); ctx.lineTo(815, 442); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = ORANGE; ctx.stroke(); }
+      }
+      var sg = clamp((t - 5.0) / 0.5, 0, 1);
+      if (sg > 0) STORE.forEach(function (p) { var a = clamp((sg * 140 - p.d) / 16, 0, 1); if (a > 0) dot(p.x, p.y, 3.6 * backOut(a), rgb(LAND, p.a)); });
+      [212, 286, 360].forEach(function (cy, i) {
+        var p = ease(clamp((t - 5.5 - 0.15 * i) / 0.2, 0, 1));
+        if (p > 0) dotted([[955, 320], [lerp(955, 1030, p), lerp(320, cy, p)]], 2.5, 7, ORANGE);
+      });
+      var v = vehicleAt(t);
+      if (k > 0) [[40, 1], [65, 0.6], [90, 0.3]].forEach(function (a, i) {
+        var lt = clamp((t - 4.2 - 0.1 * i) / 0.3, 0, 1);
+        if (lt > 0) dottedArc(v.x, v.y, a[0] * (0.8 + 0.2 * lt), -100 * Math.PI / 180, -35 * Math.PI / 180, 6, 11, a[1] * lt * k);
+      });
+      dot(v.x, v.y, v.h, oa(0.16));
+      var ph = pulse(now, 1.6); ring(v.x, v.y, v.r + ph * 50, ph, oa, 0.35);
+      core(v.x, v.y, v.r, 2.5);
+    };
+  })();
+
+  // ---------- Scene 4 · Delivery ----------
+  var R4 = [];
+  run(R4, 300, 428, 516); R4.push([432, 508], [436, 500], [440, 492], [444, 484]);
+  run(R4, 448, 616, 476); R4.push([620, 468]); run(R4, 628, 772, 468);
+  R4.push([776, 476], [780, 484], [784, 492], [788, 500], [792, 508], [796, 516], [800, 524]);
+  run(R4, 808, 968, 524); R4.push([972, 532], [976, 540]); run(R4, 984, 1144, 540);
+  var START = { x: 300, y: 516 }, FINISH = { x: 1152, y: 540 };
+
+  var scene4 = (function () {
+    var VI = 43, HUB = { x: 748, y: 452 }, CORE = { x: 805, y: 542 };
+    var CLOUD = [], STORE = [];
+    function inC(x, y, cx, cy, r) { return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r; }
+    function inE(x, y, cx, cy, rx, ry) { var a = (x - cx) / rx, b = (y - cy) / ry; return a * a + b * b <= 1; }
+    function band(x, y, y0) { var u = (x - 805) / 75; if (Math.abs(u) > 1) return false; return Math.abs(y - (y0 + 20 * Math.sqrt(1 - u * u))) < 5; }
+    for (var m = 0; m < 30; m++) {
+      [[7 + 28 * m, 7], [21 + 28 * m, 0]].forEach(function (r) {
+        var y = r[0];
+        for (var x = r[1]; x <= W; x += 14) {
+          if (inC(x, y, 720, 320, 65) || inC(x, y, 805, 275, 88) || inC(x, y, 890, 320, 65) || (x >= 720 && x <= 890 && y >= 320 && y <= 385)) CLOUD.push({ x: x, y: y });
+          var top = inE(x, y, 805, 472, 75, 20) && y < 472;
+          var body = (x >= 730 && x <= 880 && y >= 472 && y <= 612) || (inE(x, y, 805, 612, 75, 20) && y > 612);
+          if ((top || body) && !band(x, y, 518) && !band(x, y, 565)) STORE.push({ x: x, y: y, a: top ? 0.45 : 1, w: ((x * 7 + y * 13) % 100) / 400 });
+        }
+      });
+    }
+    function mapCam(t) {
+      if (t < 1.5) {
+        var e = ease(clamp((t - 0.6) / 0.9, 0, 1)), s = 2.0 * Math.pow(0.7 / 2.0, e);
+        var P = { x: lerp(CORE.x, 974, e), y: lerp(CORE.y, 352.8, e) };
+        return { s: s, ox: P.x - s * HUB.x, oy: P.y - s * HUB.y };
+      }
+      var d = ease(clamp((t - 1.5) / 0.9, 0, 1));
+      return { s: lerp(0.7, 0.85, d), ox: lerp(450.4, 391.2, d), oy: lerp(36.4, -5.8, d) };
+    }
+    return function (t, now) {
+      var c = clamp(t / 0.7, 0, 1), ce = easeIn(c);
+      if (t < 0.9) {
+        var ga = 1 - clamp((t - 0.3) / 0.5, 0, 1);
+        if (ga > 0) { ctx.save(); ctx.globalAlpha = ga; fillPattern(pat.l2, [0.25, 0, 0, 0.25, 0, 0]); fadeLeft(640, 1); ctx.restore(); }
+        var fa = 1 - clamp(t / 0.4, 0, 1);
+        if (fa > 0) {
+          CLOUD.forEach(function (p) { dot(p.x, p.y, 3.6, rgb(LAND, fa)); });
+          dotted([[640, 548], [680, 500], [735, 395]], 6, 12, oa(0.6 * fa));
+          dotted([[805, 400], [805, 448]], 6, 12, oa(fa));
+          [[40, 1], [65, 0.6], [90, 0.3]].forEach(function (a) { dottedArc(609, 623, a[0], -100 * Math.PI / 180, -35 * Math.PI / 180, 6, 11, a[1] * fa); });
+          dot(609, 623, 22, oa(0.16 * fa)); dot(609, 623, 9, oa(fa));
+        }
+        if (c < 1) STORE.forEach(function (p) {
+          var k = clamp((ce - p.w) / (1 - p.w), 0, 1);
+          dot(lerp(p.x, CORE.x, k), lerp(p.y, CORE.y, k), lerp(3.6, 2, k), rgb(mix(LAND, OR, k), lerp(p.a, 1, k)));
+        });
+      }
+      var ma = clamp((t - 0.6) / 0.3, 0, 1), cam = mapCam(t), s = cam.s, ox = cam.ox, oy = cam.oy;
+      if (ma > 0) { ctx.save(); ctx.globalAlpha = ma; fillPattern(pat.sea126, [s / 9, 0, 0, s / 9, ox, oy]); landDots(s, ox, oy, 3 * s, 1); ctx.restore(); }
+      function S(p) { return { x: ox + s * p.x, y: oy + s * p.y }; }
+      if (t >= 0.7 && t < 2.3) {
+        var f = ease(clamp((t - 1.5) / 0.7, 0, 1)), hp = S({ x: lerp(HUB.x, START.x, f), y: lerp(HUB.y, START.y, f) });
+        if (t < 1.5) { var e1 = ease(clamp((t - 0.6) / 0.9, 0, 1)); hp = { x: lerp(CORE.x, 974, e1), y: lerp(CORE.y, 352.8, e1) }; }
+        var grow = backOut(clamp((t - 0.6) / 0.3, 0, 1));
+        dot(hp.x, hp.y, 26.6 * grow, oa(0.16)); core(hp.x, hp.y, 11.2 * grow, 3);
+      }
+      var rp = clamp((t - 2.5) / 1.2, 0, 1), shown = Math.floor(rp * R4.length);
+      for (var j = 0; j < shown; j++) { var q = S({ x: R4[j][0], y: R4[j][1] }); dot(q.x, q.y, 3.6 * s, ORANGE); }
+      if (rp > 0 && rp < 1) { var hd = S({ x: R4[Math.max(0, shown - 1)][0], y: R4[Math.max(0, shown - 1)][1] }); dot(hd.x, hd.y, 18 * s, oa(0.18)); dot(hd.x, hd.y, 6 * s, ORANGE); }
+      var sa = clamp((t - 2.2) / 0.25, 0, 1);
+      if (sa > 0) {
+        var sp = S(START), g1 = backOut(sa);
+        if (t < 2.7) dot(sp.x, sp.y, 30 * s * g1, oa(0.14 * (1 - clamp((t - 2.45) / 0.25, 0, 1))));
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, 13 * s * g1, 0, Math.PI * 2); ctx.fillStyle = rgb(BG, 1); ctx.fill(); ctx.lineWidth = 4 * s; ctx.strokeStyle = ORANGE; ctx.stroke();
+        dot(sp.x, sp.y, 5.5 * s * g1, ORANGE);
+      }
+      var pa = clamp((t - 2.35) / 0.25, 0, 1);
+      if (pa > 0) {
+        var fp = S(FINISH), g2 = backOut(pa);
+        if (t < 2.85) dot(fp.x, fp.y, 30 * s * g2, oa(0.14 * (1 - clamp((t - 2.6) / 0.25, 0, 1))));
+        pin_(fp.x, fp.y, s * g2, 1);
+      }
+      var va = clamp((t - 3.8) / 0.25, 0, 1);
+      var vf = ease(clamp((t - 3.9) / 1.1, 0, 1)) * VI, vi = Math.floor(vf), fr = vf - vi;
+      var a = R4[vi], b = R4[Math.min(vi + 1, R4.length - 1)], vp = S({ x: lerp(a[0], b[0], fr), y: lerp(a[1], b[1], fr) });
+      [212, 286, 360].forEach(function (cy, i) {
+        var p = ease(clamp((t - 5.0 - 0.15 * i) / 0.2, 0, 1));
+        if (p > 0) dotted([[vp.x, vp.y], [lerp(vp.x, 1030, p), lerp(vp.y, cy, p)]], 2.5, 7, ORANGE);
+      });
+      if (va > 0) {
+        var g3 = backOut(va); dot(vp.x, vp.y, 22 * g3, oa(0.18));
+        var ph = pulse(now, 1.6); ring(vp.x, vp.y, 9 + ph * 40, ph, oa, 0.35);
+        core(vp.x, vp.y, 9 * g3, 2.5);
+      }
+    };
+  })();
+
+  // ---------- Scene 5 · Monitoring ----------
+  var scene5 = (function () {
+    var V0 = 43, VF = 69, FOCUS = { x: 800, y: 524 }, M = { s: 0.85, ox: 391.2, oy: -5.8 };
+    var SR = [[558,450],[594,450],[630,450],[648,414],[684,414],[720,414],[738,378],[774,378],[810,378],[828,414],[846,450],[882,450],[918,450],[954,450],[972,486],[1008,486],[1044,486],[1062,450],[1098,450],[1134,450],[1170,450],[1206,450],[1242,450],[1278,450],[1314,450],[1350,450],[1386,450],[1422,450]];
+    var SV0 = 6, SV1 = 12, SRED = 15, P_ST = { x: 738, y: 378 }, S_ST = 4.5;
+    function camera(t) {
+      var e = ease(clamp((t - 1.5) / 1.0, 0, 1));
+      if (e === 0) return { s: M.s, ox: M.ox, oy: M.oy, e: 0 };
+      var s = M.s * Math.pow(S_ST / M.s, e);
+      var P = { x: lerp(M.ox + M.s * FOCUS.x, P_ST.x, e), y: lerp(M.oy + M.s * FOCUS.y, P_ST.y, e) };
+      return { s: s, ox: P.x - s * FOCUS.x, oy: P.y - s * FOCUS.y, e: e };
+    }
+    return function (t, now) {
+      var cam = camera(t), s = cam.s, ox = cam.ox, oy = cam.oy, e = cam.e;
+      var dim = ease(clamp((t - 1.0) / 0.4, 0, 1)), kc = ease(clamp((t - 2.5) / 0.4, 0, 1));
+      if (t < 2.5) {
+        fillPattern(pat.sea126, [s / 9, 0, 0, s / 9, ox, oy]);
+        landDots(s, ox, oy, lerp(3 * M.s, 6.5, e), lerp(1, 0.7, dim));
+      } else {
+        var nx0 = Math.floor((-ox) / s / 8) * 8 - 8, nx1 = Math.ceil((W - ox) / s / 8) * 8 + 8;
+        var ny0 = Math.floor((-oy) / s / 8) * 8 - 8, ny1 = Math.ceil((H - oy) / s / 8) * 8 + 8;
+        for (var ny = ny0; ny <= ny1; ny += 8) {
+          var row = ((ny - 148) / 8) % 2 === 0 ? 4 : 0;
+          for (var nx = nx0 - ((nx0 - row) % 8 + 8) % 8; nx <= nx1; nx += 8) {
+            var isLand = !!landSet[nx * 10000 + ny];
+            dot(ox + s * nx, oy + s * ny, lerp(isLand ? 6.5 : 6.75, 5.5, kc), rgb(mix(isLand ? LAND : GRID, GRID, kc), lerp(isLand ? 0.7 : 1, 1, kc)));
+          }
+        }
+        fadeLeft(620, kc);
+      }
+      var vm = ease(clamp((t - 0.3) / 0.7, 0, 1)) * (VF - V0) + V0;
+      var routeA = 1 - clamp((t - 2.5) / 0.4, 0, 1);
+      if (routeA > 0) {
+        var rr = lerp(3.6 * M.s, 7.5, e);
+        for (var j = 0; j < R4.length; j++) dot(ox + s * R4[j][0], oy + s * R4[j][1], rr, oa(lerp(1, 0.5, dim) * routeA));
+        var mk = (1 - e) * lerp(1, 0.5, dim);
+        if (mk > 0.01) {
+          var sp = { x: ox + s * START.x, y: oy + s * START.y };
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, 13 * s, 0, Math.PI * 2); ctx.fillStyle = rgb(BG, 1); ctx.fill(); ctx.lineWidth = 4 * s; ctx.strokeStyle = oa(mk); ctx.stroke();
+          pin_(ox + s * FINISH.x, oy + s * FINISH.y, s, mk);
+        }
+      }
+      var sa = clamp((t - 2.6) / 0.4, 0, 1);
+      var sv = SV0 + clamp((t - 4.4) / 1.2, 0, 1) * (SV1 - SV0), svi = Math.floor(sv);
+      var redA = clamp((t - 3.7) / 0.3, 0, 1);
+      if (sa > 0) for (var q = 0; q < SR.length; q++) {
+        if (q === SRED && redA > 0) continue;
+        var a = q <= svi ? (q < 3 ? [0.35, 0.55, 0.75][q] : 1) : (q >= SR.length - 3 ? [0.25, 0.15, 0.08][q - (SR.length - 3)] : 0.35);
+        dot(SR[q][0], SR[q][1], 7.5, oa(a * sa));
+      }
+      if (redA > 0) {
+        var rx = SR[SRED][0], ry = SR[SRED][1], gr = backOut(redA);
+        dot(rx, ry, 48 * gr, ra(0.1)); dot(rx, ry, 28 * gr, ra(0.2));
+        var rph = pulse(now, 1.2); ring(rx, ry, 14 + rph * 46, rph, ra, 0.45);
+        ctx.beginPath(); ctx.arc(rx, ry, 14 * gr, 0, Math.PI * 2); ctx.fillStyle = RED; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = rgb(BG, 1); ctx.stroke();
+        ctx.save(); ctx.translate(rx, ry); ctx.scale(gr, gr);
+        ctx.beginPath(); ctx.moveTo(0, -6.7); ctx.lineTo(6, 4.3); ctx.lineTo(-6, 4.3); ctx.closePath(); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+        ctx.restore();
+        var lc = clamp((t - 5.35) / 0.15, 0, 1);
+        if (lc > 0) dotted([[rx, 506], [rx, lerp(506, 538, lc)]], 2.5, 7, RED);
+      }
+      var vx, vy, vr, vh, vo;
+      if (t < 2.6) {
+        var vi = Math.floor(vm), fr = vm - vi, pa = R4[vi], pb = R4[Math.min(vi + 1, R4.length - 1)];
+        vx = ox + s * lerp(pa[0], pb[0], fr); vy = oy + s * lerp(pa[1], pb[1], fr);
+        vr = lerp(9, 13, e); vh = lerp(22, 32, e); vo = e;
+      } else {
+        var hi = Math.min(Math.floor(sv), SR.length - 2), hf = ease(sv - hi);
+        vx = lerp(SR[hi][0], SR[hi + 1][0], hf); vy = lerp(SR[hi][1], SR[hi + 1][1], hf);
+        if (sv >= SV1) { vx = SR[SV1][0]; vy = SR[SV1][1]; }
+        vr = 13; vh = 32; vo = sv >= SV1 ? 0 : 1;
+      }
+      [212, 286, 360].forEach(function (cy, k) {
+        var p = ease(clamp((t - 5.9 - 0.15 * k) / 0.2, 0, 1));
+        if (p > 0) dotted([[vx, vy], [lerp(vx, 1030, p), lerp(vy, cy, p)]], 2.5, 7, ORANGE);
+      });
+      if (vo > 0) dot(vx, vy, 56, oa(0.08 * vo));
+      dot(vx, vy, vh, oa(0.16));
+      var ph = pulse(now, 1.6); ring(vx, vy, vr + ph * 50, ph, oa, 0.35);
+      core(vx, vy, vr, 2.5);
+      var lk = clamp((t - 1.0) / 0.4, 0, 1), rel = 1 - e;
+      if (lk > 0 && rel > 0) brackets(vx, vy, 30 * lerp(1.4, 1, backOut(lk)) * (1 + 2 * e), 16 * (1 + 2 * e), Math.min(1, lk * 2) * rel);
+    };
+  })();
+
+  // ---------- Story timeline: scroll -> scene + local time ----------
+  // Each scene scrubs t0 -> t1 (its start frame equals the previous scene's end frame), then holds so the cards can be read.
+  var SCENES = [
+    { render: scene1, t0: 1.2, t1: 5.8, hold: 1.2, cues: [5.25, 5.4, 5.55] },
+    { render: scene2, t0: 0, t1: 5.9, hold: 1.2, cues: [5.45, 5.6, 5.75] },
+    { render: scene3, t0: 0, t1: 6.1, hold: 1.2, cues: [5.65, 5.8, 5.95] },
+    { render: scene4, t0: 0, t1: 5.7, hold: 1.2, cues: [5.15, 5.3, 5.45] },
+    { render: scene5, t0: 0, t1: 6.7, hold: 1.6, cues: [6.05, 6.2, 6.35] }
+  ];
+  var TOTAL = 0;
+  SCENES.forEach(function (sc, i) {
+    sc.off = TOTAL; sc.len = (sc.t1 - sc.t0) + sc.hold; TOTAL += sc.len;
+    sc.ui = document.getElementById('ui' + i);
+    sc.cards = sc.ui.querySelectorAll('.card');
+    sc.cardStart = sc.off + (sc.cues[0] - sc.t0);
+  });
+  var alertEl = document.getElementById('alert');
+
+  function locate(g) {
+    for (var i = 0; i < SCENES.length - 1; i++) if (g < SCENES[i].off + SCENES[i].len) break;
+    var sc = SCENES[i];
+    return { i: i, t: sc.t0 + clamp(g - sc.off, 0, sc.t1 - sc.t0) };
+  }
+
+  function overlays(g, at) {
+    SCENES.forEach(function (sc, i) {
+      var active = i === at.i;
+      sc.cards.forEach(function (el, k) { el.classList.toggle('in', active && at.t >= sc.cues[k]); });
+      // Depth: once its cards are out, a scene's UI layer rises faster than the map behind it
+      var d = ease(clamp((g - sc.cardStart) / (sc.off + sc.len - sc.cardStart), 0, 1));
+      sc.ui.style.transform = 'translateY(' + (-48 * d) + 'px)';
+    });
+    alertEl.classList.toggle('in', at.i === 4 && at.t >= 5.45);
+  }
+
+  function layout() {
+    var vw = pin.clientWidth, vh = pin.clientHeight, k = Math.min(vw / W, vh / H);
+    stage.style.transform = 'translate(' + ((vw - W * k) / 2) + 'px,' + ((vh - H * k) / 2) + 'px) scale(' + k + ')';
+    var px = Math.max(1, k * Math.min(window.devicePixelRatio || 1, 2));
+    cv.width = Math.round(W * px); cv.height = Math.round(H * px);
+    ctx.setTransform(px, 0, 0, px, 0, 0);
+    makePatterns();
+  }
+  function draw(at, now) { ctx.fillStyle = rgb(BG, 1); ctx.fillRect(0, 0, W, H); SCENES[at.i].render(at.t, now); }
+
+  function scrollState() {
+    var rect = scrolly.getBoundingClientRect(), span = rect.height - pin.clientHeight;
+    return { p: span > 0 ? clamp(-rect.top / span, 0, 1) : 0, visible: rect.bottom > 0 && rect.top < window.innerHeight };
+  }
+
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) {
+    document.documentElement.classList.add('static');
+    var endAt = { i: 0, t: 5.8 };
+    var drawStatic = function () { layout(); draw(endAt, 0); overlays(SCENES[0].off + SCENES[0].len, endAt); };
+    drawStatic();
+    window.addEventListener('resize', drawStatic);
+    return;
+  }
+
+  var loadAt = null, gCur = 0, last = 0;
+  function tick(now) {
+    if (loadAt === null) loadAt = now;
+    var dt = last ? Math.min((now - last) / 1000, 0.1) : 0; last = now;
+    var st = scrollState(), gT = st.p * TOTAL;
+    var introT = clamp((now - loadAt) / 1000, 0, 1.2);
+    gCur += (gT - gCur) * (1 - Math.exp(-dt * 7));   // smoothed scrub
+    if (Math.abs(gT - gCur) < 0.0005) gCur = gT;
+    if (st.visible) {
+      var at = (introT < 1.2 && gCur < 0.001) ? { i: 0, t: introT } : locate(gCur);  // intro plays once on load
+      draw(at, now); overlays(gCur, at);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  layout();
+  window.addEventListener('resize', layout);
+  var start = function () { requestAnimationFrame(tick); };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
+})();
+</script>
