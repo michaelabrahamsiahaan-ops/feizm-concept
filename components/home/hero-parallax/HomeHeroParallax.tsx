@@ -315,24 +315,42 @@ export function HomeHeroParallax() {
             ...(reducedMotion
               ? { position: "relative", width: "100%", aspectRatio: `${STAGE_W} / ${STAGE_H}` }
               : { position: "sticky", top: 0, width: "100%", height: "100vh" }),
-            // The stage below is "contain"-fit (same letterboxing the
-            // prototype's own layout() does: scaled to fit without
-            // cropping, centered, so at any viewport ratio other than
-            // 1440:796 there's a margin on one axis outside the scaled
-            // stage). That margin used to be invisible because the
-            // canvas's own flat #0E0E11 fill matched this div's
-            // background exactly; now that the canvas draws the supplied
-            // image instead, a flat color there reads as a visible seam
-            // (reported: a black strip at the top of the hero). Covering
-            // this div with the same image (background-size: cover, not
-            // contain) means the letterbox margin shows a cropped edge of
-            // the same artwork instead of a mismatched flat color.
             backgroundColor: "#0E0E11",
-            backgroundImage: "url(/home-hero/background.png)",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
           }}
         >
+          {/* Letterbox backdrop — the stage below is "contain"-fit (same
+              letterboxing the prototype's own layout() does: scaled to fit
+              without cropping, centered, so at any viewport ratio other
+              than 1440:796 there's a margin outside the scaled stage on
+              one axis). A flat color there read as a visible seam once
+              the canvas started drawing this image instead of a flat
+              fill (reported). Using `background-size: cover` directly on
+              this margin was a worse seam, not a fix: cover crops/zooms
+              the image to a DIFFERENT scale than the canvas's contain-fit
+              copy, so the sharp dot-pattern texture visibly jumps scale
+              right at the stage edge (reported again, as "2 gaps" above
+              the logo and below the progress bar — the top and bottom
+              letterbox margins). Blurring this backdrop layer hides that
+              mismatch instead of trying to eliminate it: a blur erases
+              the dot-grid's own alignment, leaving only a soft color
+              blend behind the sharp stage, which reads as continuous
+              regardless of the two layers' different scales. Scaled up
+              110% so the blur's own edge softening doesn't reveal the
+              image's true (unblurred) border. Isolated to this one
+              dedicated layer (not applied to `pin` itself) so the blur
+              never touches the sharp canvas/UI stacked on top of it. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: "url(/home-hero/background.png)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: "blur(60px)",
+              transform: "scale(1.1)",
+            }}
+          />
+
           <div ref={stageRef} className="absolute left-0 top-0" style={{ width: STAGE_W, height: STAGE_H, transformOrigin: "0 0" }}>
             <canvas
               ref={canvasRef}
