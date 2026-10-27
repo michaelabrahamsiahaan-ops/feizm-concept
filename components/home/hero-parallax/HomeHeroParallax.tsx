@@ -154,7 +154,26 @@ export function HomeHeroParallax() {
 
     function layout() {
       const vw = pin!.clientWidth, vh = pin!.clientHeight;
-      const k = Math.min(vw / STAGE_W, vh / STAGE_H);
+      // Math.max (cover), not Math.min (contain, the prototype's own
+      // choice). Contain-fit always leaves a letterbox margin outside the
+      // scaled stage at any ratio other than exactly 1440:796 — three
+      // rounds of trying to fill that margin (flat color, then a cover-
+      // fit crop of the same image, then a blurred version of that crop,
+      // then feathered masks on top of that) all still read as a visible
+      // seam/gradient against the Figma reference, which has NO margin
+      // at all (it's a fixed 1440x795 export). Cover-fit removes the
+      // margin structurally instead of trying to disguise it — the stage
+      // now always fills `pin` edge-to-edge, with `overflow-hidden`
+      // cropping whatever spills past the shorter axis (same pattern
+      // every other hero in this project already uses — Hero.tsx/
+      // FleetHero.tsx's own background images are `object-cover`, not
+      // letterboxed). The hero UI text is deliberately NOT inside this
+      // scaled stage (see the render below) specifically because cover-
+      // fit crops/shifts it at common ratios (e.g. at 1440x900 this scale
+      // factor shifts the stage ~94px left) — it renders at its own
+      // literal pixel position against the real, unscaled viewport
+      // instead, same as every other hero's text in this project.
+      const k = Math.max(vw / STAGE_W, vh / STAGE_H);
       stage!.style.transform = `translate(${(vw - STAGE_W * k) / 2}px,${(vh - STAGE_H * k) / 2}px) scale(${k})`;
       const px = Math.max(1, k * Math.min(window.devicePixelRatio || 1, 2));
       canvas!.width = Math.round(STAGE_W * px);
@@ -335,106 +354,13 @@ export function HomeHeroParallax() {
             backgroundColor: "#0E0E11",
           }}
         >
-          {/* Letterbox backdrop — the stage below is "contain"-fit (same
-              letterboxing the prototype's own layout() does: scaled to fit
-              without cropping, centered, so at any viewport ratio other
-              than 1440:796 there's a margin outside the scaled stage on
-              one axis). A flat color there read as a visible seam once
-              the canvas started drawing this image instead of a flat
-              fill (reported). Using `background-size: cover` directly on
-              this margin was a worse seam, not a fix: cover crops/zooms
-              the image to a DIFFERENT scale than the canvas's contain-fit
-              copy, so the sharp dot-pattern texture visibly jumps scale
-              right at the stage edge (reported again, as "2 gaps" above
-              the logo and below the progress bar — the top and bottom
-              letterbox margins). Blurring this backdrop layer hides that
-              mismatch instead of trying to eliminate it: a blur erases
-              the dot-grid's own alignment, leaving only a soft color
-              blend behind the sharp stage, which reads as continuous
-              regardless of the two layers' different scales. Scaled up
-              110% so the blur's own edge softening doesn't reveal the
-              image's true (unblurred) border. Isolated to this one
-              dedicated layer (not applied to `pin` itself) so the blur
-              never touches the sharp canvas/UI stacked on top of it. */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage: "url(/home-hero/background.png)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              filter: "blur(60px)",
-              transform: "scale(1.1)",
-            }}
-          />
-
           <div ref={stageRef} className="absolute left-0 top-0" style={{ width: STAGE_W, height: STAGE_H, transformOrigin: "0 0" }}>
             <canvas
               ref={canvasRef}
               role="img"
               aria-hidden="true"
               className="absolute left-0 top-0"
-              style={{
-                width: STAGE_W,
-                height: STAGE_H,
-                // Feathers the canvas's own top/bottom ~30px to
-                // transparent, revealing the blurred backdrop underneath
-                // gradually instead of a hard cut. At viewport ratios
-                // other than exactly 1440:796 the canvas is "contain"-fit
-                // (see layout() above) and doesn't reach the pin's own
-                // top/bottom edge — the sharp dot-pattern of the real
-                // scene content was ending in a hard line right where the
-                // blurred backdrop (added to fill that letterbox margin)
-                // began, visible as a thin band along the hero's bottom
-                // edge (reported, with a screenshot circling it) — purely
-                // a sharpness discontinuity, not a color one (the colors
-                // already matched; this is why that didn't fix it).
-                maskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
-              }}
-            />
-
-            {/* Left-side black gradient scrim — Figma "Home / 01 Hero"'s
-                own "Container" node (the same frame that holds the
-                headline/buttons below, not a separate overlay layer in
-                Figma — same "Container owns both the gradient fill AND
-                the text" construction as Hero.tsx/FleetHero.tsx) has a
-                GRADIENT_LINEAR fill. Its raw gradientTransform matrix
-                implies a rotation, and hand-decoding it was unreliable
-                (same conclusion reached for every other gradient in this
-                project) — pixel-sampled the exported Container PNG's
-                alpha channel instead (every 2px along a text-free row,
-                checked against multiple rows to confirm it's a clean
-                horizontal gradient, not diagonal): flat opaque black
-                from 0% to 6.4% of the hero's width, then a linear fade
-                down to fully transparent by 49.2%, flat transparent for
-                the remaining right half. Darkens the illustration behind
-                the headline/button column specifically — this is what
-                was missing when the floating cards' white dots read as
-                fighting with the headline text after the background
-                image swap (see prior conversation turn). Sits above the
-                canvas/cards (matching Figma's own stacking: the
-                illustration frame comes before Container, so Container's
-                fill paints over it) but below the actual UI content
-                further down, which stays fully undimmed. */}
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 6.4%, rgba(0,0,0,0) 49.2%)",
-                // Same top/bottom feather as the canvas above, and for the
-                // same reason: this scrim also ends sharply at the
-                // stage's own top/bottom edge, independent of the canvas
-                // fix — it's a separate DOM layer, so masking the canvas
-                // alone didn't fade this one's edge too. Left part of the
-                // seam that was still visible after the canvas mask
-                // (confirmed by sampling pixels at the boundary: a real
-                // brightness step at x~400-1000, roughly where this scrim
-                // is still strong, nearly absent further right where the
-                // scrim has already faded to transparent).
-                maskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to bottom, transparent 0, black 30px, black calc(100% - 30px), transparent 100%)",
-              }}
+              style={{ width: STAGE_W, height: STAGE_H }}
             />
 
             {/* Per-scene floating feature cards — ported 1:1 from the prototype's #ui0..#ui4, see scene-cards-data.ts */}
@@ -509,10 +435,44 @@ export function HomeHeroParallax() {
               <span style={{ flexShrink: 0, marginTop: 1 }} dangerouslySetInnerHTML={{ __html: ALERT_ICON_SVG }} />
               <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Plus Jakarta Sans', var(--font-hanken-grotesk), sans-serif" }}>{ALERT_TITLE}</span>
             </div>
+          </div>
+          {/* ^ end of `stage` — everything above this line is scene
+              geometry (canvas, feature cards, the alert) and scales/crops
+              together via the cover-fit transform above. Everything
+              below is real UI chrome and is deliberately OUTSIDE `stage`,
+              positioned against the real (unscaled) pin instead — see
+              layout()'s own comment for why. */}
 
-            {/* ---- Hero UI overlay (depth 0 — never moves), from Figma "Home / 01 Hero" ---- */}
-            <div
-              className="absolute inset-0 flex flex-col justify-end"
+          {/* Left-side black gradient scrim — Figma "Home / 01 Hero"'s own
+              "Container" node (the same frame that holds the headline/
+              buttons below, not a separate overlay layer in Figma — same
+              "Container owns both the gradient fill AND the text"
+              construction as Hero.tsx/FleetHero.tsx) has a GRADIENT_LINEAR
+              fill. Its raw gradientTransform matrix implies a rotation,
+              and hand-decoding it was unreliable (same conclusion reached
+              for every other gradient in this project) — pixel-sampled
+              the exported Container PNG's alpha channel instead (every
+              2px along a text-free row, checked against multiple rows to
+              confirm it's a clean horizontal gradient, not diagonal):
+              flat opaque black from 0% to 6.4% of the hero's width, then
+              a linear fade down to fully transparent by 49.2%, flat
+              transparent for the remaining right half. Sized against the
+              real (unscaled) pin, same as the UI overlay below it, not
+              against the scaled 1440-wide stage — darkens the
+              illustration behind the headline/button column specifically,
+              which is itself positioned against the real pin too, so the
+              two stay aligned regardless of viewport width. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 6.4%, rgba(0,0,0,0) 49.2%)",
+            }}
+          />
+
+          {/* ---- Hero UI overlay (depth 0 — never moves), from Figma "Home / 01 Hero" ---- */}
+          <div
+            className="absolute inset-0 flex flex-col justify-end"
               style={{
                 paddingLeft: "var(--fig-spacing-40)",
                 paddingRight: "var(--fig-spacing-40)",
@@ -633,7 +593,6 @@ export function HomeHeroParallax() {
                 </div>
               </div>
             </div>
-          </div>
         </div>
       </div>
     </section>
