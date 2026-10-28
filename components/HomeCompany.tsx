@@ -19,6 +19,12 @@ const APPEAR_DURATION_MS = 900;
 const APPEAR_STAGGER_MS = 150;
 const APPEAR_EASE = "cubic-bezier(.16,1,.3,1)"; // ease-out
 const APPEAR_TRANSLATE_PX = 24;
+// Small buffer added on top of the appear's own total duration before the
+// transitionend-watcher's timer fallback fires — see applyAppear.
+const APPEAR_WATCHER_TIMEOUT_BUFFER_MS = 50;
+// Phase 2 (the sweep) must cover at least this fraction of the viewport
+// height once rebased, or it's extended — see the tick()/rebase comment.
+const MIN_SWEEP_VIEWPORT_FRACTION = 0.4;
 
 const GRAY: [number, number, number] = [131, 129, 129]; // --fig-color-neutral-500
 const BLACK: [number, number, number] = [3, 0, 0]; // --fig-color-neutral-900 (this section's own text color)
@@ -114,11 +120,62 @@ const headingWordCount = wordCount(HEADING_TEXT);
  *   --tp (text sweep):    0 at the scrollY where the HEADING's top
  *        reaches 90% of the viewport (same scrollY the appear trigger
  *        below uses); 1 at the scrollY where the PARAGRAPH's bottom
- *        reaches 25% from the viewport's top.
- * Both are pure functions of scrollY (computed fresh from the live
- * scroll position every tick, not accumulated/eased), so scrolling back
- * up reverses both exactly. They're allowed to overlap in time (the spec
- * says so explicitly) — nothing coordinates one against the other.
+ *        reaches 25% from the viewport's top — THIS pair of endpoints is
+ *        only the *configured* range; see "Two-phase sequencing" below
+ *        for how it's actually applied.
+ * --p is a pure function of scrollY (computed fresh from the live scroll
+ * position every tick, not accumulated/eased), so scrolling back up
+ * reverses it exactly.
+ *
+ * ---- Two-phase sequencing (appear, then sweep) ----
+ * The sweep (--tp) is gated behind the appear finishing — they used to
+ * run concurrently (the sweep could start moving words toward black while
+ * they were still fading in), which read as the text changing color
+ * mid-fade. Now:
+ *   Phase 1 (appear, time-based, below): while it is running — or hasn't
+ *     started yet — every word is forced to the flat gray start color
+ *     (`applyTextSweep(0)`), full stop, no matter how far the user keeps
+ *     scrolling.
+ *   Phase 2 (sweep, scroll-linked): unlocked (`sweepUnlockedRef`, a
+ *     one-way latch like `appearedRef` itself) only once the paragraph's
+ *     own appear transition actually finishes — a real `transitionend`
+ *     on the paragraph, with a timer fallback (total appear duration +
+ *     a small buffer) in case the event never fires (e.g. the tab was
+ *     backgrounded, or a browser quirk drops it). The moment it unlocks,
+ *     `completionScrollYRef` records either the scrollY at that instant
+ *     (the common case) or `-Infinity` (meaning "don't rebase, use the
+ *     configured range as-is") for two situations where rebasing would
+ *     be wrong:
+ *       - instant/no-gating path (page loaded already past the appear
+ *         threshold — see applyAppear's `instant` branch): the spec
+ *         wants the sweep applied directly at the correct progress, no
+ *         phase gating at all.
+ *       - the section has already scrolled fully off-screen (its own
+ *         bottom <= 0) by the time the timer/transitionend fires, e.g.
+ *         from very fast scrolling: rebasing to "now" would restart the
+ *         sweep from gray on a section the user can no longer see and
+ *         isn't scrolling back into on purpose. Using the *unrebased*
+ *         configured range instead makes it resolve to its correct
+ *         (already fully swept) state immediately, matching the spec's
+ *         "jump to the correct state for the current position" case.
+ *   Every tick, once unlocked, the EFFECTIVE range re-derives from that
+ *   one latched value — not a second mutable range — so a later resize
+ *   (which recomputes the *configured* `textStartY`/`textEndY` from
+ *   fresh layout via `measure()`) still rebases correctly instead of
+ *   silently reverting: `effStart = max(textStartY, completionScrollY)`,
+ *   `effEnd = textEndY`, then if `effEnd - effStart` is under
+ *   `MIN_SWEEP_VIEWPORT_FRACTION` of the viewport height, `effEnd` is
+ *   pushed out that far (capped at `maxScrollY`, same reachability
+ *   clamp as everything else here) so the sweep is never rushed. This is
+ *   exactly the spec's "no jump" rule: if the user kept scrolling during
+ *   the fade, `effStart` lands at wherever they are *right when Phase 1
+ *   finishes*, so the very next tick's progress is 0 (all still gray)
+ *   and grows smoothly from there — never a burst of words snapping to
+ *   black at once.
+ * Once unlocked, `sweepUnlockedRef` never re-locks — scrolling back up
+ * above the section and down again does not replay the appear (already
+ * true of `appearedRef`) and the sweep simply keeps following its own
+ * (by-then-fixed) effective range, fully reversible within it.
  *
  * Applied the same way as before: the pattern is two stacked copies of
  * the same SVG (a permanent grayscale base layer + the real orange layer
@@ -186,6 +243,10 @@ export function HomeCompany() {
   const paragraphWrapRef = useRef<HTMLParagraphElement | null>(null);
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const appearedRef = useRef(false);
+  // Phase-2 gate — see the "Two-phase sequencing" doc comment above.
+  const sweepUnlockedRef = useRef(false);
+  const completionScrollYRef = useRef(-Infinity);
+  const maxScrollYRef = useRef(0);
 
   // SSR/first-client-render defaults: desktop width, not reduced motion —
   // hydration-safety (matchMedia has no SSR-safe value), same tradeoff as
@@ -234,6 +295,38 @@ export function HomeCompany() {
       pattern!.style.webkitMaskImage = mask;
     }
 
+    // Hoisted so the outer effect's cleanup can always reach whichever
+    // watcher (transitionend listener + its timer fallback) is currently
+    // pending, even though applyAppear only runs once, at an arbitrary
+    // tick well after this effect's own setup.
+    let appearTimeoutId: number | null = null;
+    let appearTransitionTarget: HTMLElement | null = null;
+    let onParagraphTransitionEnd: ((e: TransitionEvent) => void) | null = null;
+    function clearAppearWatchers() {
+      if (appearTimeoutId !== null) {
+        window.clearTimeout(appearTimeoutId);
+        appearTimeoutId = null;
+      }
+      if (appearTransitionTarget && onParagraphTransitionEnd) {
+        appearTransitionTarget.removeEventListener("transitionend", onParagraphTransitionEnd);
+      }
+      appearTransitionTarget = null;
+      onParagraphTransitionEnd = null;
+    }
+
+    function unlockSweep() {
+      if (sweepUnlockedRef.current) return;
+      // Fully scrolled past already (very fast scrolling during the
+      // fade) — rebasing to "now" would restart the sweep from gray on a
+      // section the user isn't looking at. Use the unrebased configured
+      // range instead so it resolves straight to its already-complete
+      // state — see the doc comment above.
+      const offScreen = section!.getBoundingClientRect().bottom <= 0;
+      completionScrollYRef.current = offScreen ? -Infinity : window.scrollY;
+      sweepUnlockedRef.current = true;
+      clearAppearWatchers();
+    }
+
     function applyAppear(instant: boolean) {
       if (appearedRef.current) return;
       appearedRef.current = true;
@@ -260,6 +353,25 @@ export function HomeCompany() {
       };
       reveal(heading!, 0);
       reveal(paragraph!, APPEAR_STAGGER_MS);
+
+      if (instant) {
+        // No gating at all in this case — apply the sweep directly at
+        // the correct progress for the current scroll position.
+        completionScrollYRef.current = -Infinity;
+        sweepUnlockedRef.current = true;
+        return;
+      }
+
+      onParagraphTransitionEnd = (e: TransitionEvent) => {
+        if (e.target !== paragraph) return;
+        unlockSweep();
+      };
+      appearTransitionTarget = paragraph;
+      paragraph!.addEventListener("transitionend", onParagraphTransitionEnd);
+      appearTimeoutId = window.setTimeout(
+        unlockSweep,
+        APPEAR_STAGGER_MS + APPEAR_DURATION_MS + APPEAR_WATCHER_TIMEOUT_BUFFER_MS,
+      );
     }
 
     function applyTextSweep(tp: number) {
@@ -297,6 +409,7 @@ export function HomeCompany() {
     function measure() {
       const vh = window.innerHeight;
       const maxScrollY = Math.max(0, document.documentElement.scrollHeight - vh);
+      maxScrollYRef.current = maxScrollY;
 
       const sectionTopAbs = section!.getBoundingClientRect().top + window.scrollY;
       const patternRect = pattern!.getBoundingClientRect();
@@ -327,7 +440,31 @@ export function HomeCompany() {
       const scrollY = window.scrollY;
       applyPattern(mapRange(scrollY, patternStartY, patternEndY));
       if (scrollY >= textStartY) applyAppear(isInitialTick);
-      applyTextSweep(mapRange(scrollY, textStartY, textEndY));
+
+      if (!sweepUnlockedRef.current) {
+        // Phase 1 (appear) hasn't finished yet — every word stays flat
+        // gray no matter how far the user keeps scrolling.
+        applyTextSweep(0);
+      } else {
+        // Per spec: never start earlier than "now" — pulling the start
+        // back to get more room would make progress already > 0 the
+        // instant the sweep unlocks, which is the exact snap this phase
+        // gating exists to prevent. Only the END may move, and only
+        // forward (capped at the document's own max scroll) — so on a
+        // page where the rebased start lands very close to that max
+        // (e.g. very fast scrolling, with little real estate left below
+        // this section), the sweep is still guaranteed its full window
+        // when room exists, and otherwise finishes over whatever short
+        // distance physically remains, never before.
+        const vh = window.innerHeight;
+        const effStart = Math.max(textStartY, completionScrollYRef.current);
+        let effEnd = textEndY;
+        if (effEnd - effStart < MIN_SWEEP_VIEWPORT_FRACTION * vh) {
+          effEnd = Math.min(maxScrollYRef.current, effStart + MIN_SWEEP_VIEWPORT_FRACTION * vh);
+        }
+        effEnd = Math.max(effEnd, effStart + 1);
+        applyTextSweep(mapRange(scrollY, effStart, effEnd));
+      }
       ticking = false;
     };
     const update = () => {
@@ -357,6 +494,7 @@ export function HomeCompany() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", update);
       bodyRO.disconnect();
+      clearAppearWatchers();
     };
   }, [reducedMotion, inView]);
 
