@@ -17,7 +17,13 @@ import { HalftoneGlobeWidget } from "@/components/HalftoneGlobeWidget";
 // explicitly, so this is the most consistent extrapolation for the
 // unspecified top/bottom one, not a separate arbitrary guess.
 const SIDE_INSET = "clamp(16px, 2.8vw, 64px)";
-const VERTICAL_INSET = "clamp(24px, 4.17vw, 96px)";
+// Numeric (not a CSS string) because the short-screen fallback below
+// needs to compute with it in JS (reduce it, or decide not to pin at
+// all) — VERTICAL_INSET_* mirrors this as plain CSS for the normal case.
+const VERTICAL_INSET_MIN_PX = 24;
+const VERTICAL_INSET_PREFERRED_VW = 4.17;
+const VERTICAL_INSET_MAX_PX = 96;
+const VERTICAL_INSET = `clamp(${VERTICAL_INSET_MIN_PX}px, ${VERTICAL_INSET_PREFERRED_VW}vw, ${VERTICAL_INSET_MAX_PX}px)`;
 const CARD_MAX_WIDTH_PX = 1600;
 const CARD_MIN_HEIGHT_PX = 560;
 const CARD_BG = "#FBFBFB"; // Figma's own card fill (rgb 251,251,251) — see this component's own doc comment
@@ -102,6 +108,13 @@ function easeInOutCubic(t: number) {
 }
 function easeOutCubic(t: number) {
   return 1 - Math.pow(1 - t, 3);
+}
+// Same live measurement SiteHeader/ScrollLink/HomeCompany all use for
+// the header's own rendered height.
+function headerHeightPx() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--header-h");
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 // "50.000", not "50,000" — hand-rolled rather than `toLocaleString`,
 // which is locale-dependent (wrong separator on an en-US runtime) and
@@ -245,6 +258,12 @@ export function StatsSection() {
 
   const [reducedMotion, setReducedMotion] = useState(false);
   const [inView, setInView] = useState(false);
+  // SSR-safe defaults matching the 1440 Figma reference (pinnable, full
+  // vertical inset) — corrected post-mount by the fit-measurement effect
+  // below, before first paint, same tradeoff as every other measured
+  // value in this project.
+  const [isPinnable, setIsPinnable] = useState(true);
+  const [effectiveInsetPx, setEffectiveInsetPx] = useState(60);
 
   useLayoutEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -253,6 +272,35 @@ export function StatsSection() {
     const onChange = () => setReducedMotion(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Short-screen fallback per the brief: first try shrinking the
+  // top/bottom inset so the card still hits CARD_MIN_HEIGHT_PX; only if
+  // that's not enough (available height itself is under the minimum)
+  // does the section stop pinning entirely and fall back to normal
+  // scroll flow — same "if it genuinely doesn't fit, don't pin" shape as
+  // HomeCompany's own `textFits` fallback. Pure CSS clamp() can express
+  // "shrink continuously," but not "shrink, then give up and switch
+  // layout modes" — that branch needs this JS measurement.
+  useLayoutEffect(() => {
+    function measureFit() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight; // practical proxy for 100svh on desktop
+      const available = vh - headerHeightPx();
+      const naturalInset = clamp(VERTICAL_INSET_MIN_PX, (VERTICAL_INSET_PREFERRED_VW / 100) * vw, VERTICAL_INSET_MAX_PX);
+      if (available - 2 * naturalInset >= CARD_MIN_HEIGHT_PX) {
+        setIsPinnable(true);
+        setEffectiveInsetPx(naturalInset);
+      } else if (available >= CARD_MIN_HEIGHT_PX) {
+        setIsPinnable(true);
+        setEffectiveInsetPx((available - CARD_MIN_HEIGHT_PX) / 2);
+      } else {
+        setIsPinnable(false);
+      }
+    }
+    measureFit();
+    window.addEventListener("resize", measureFit);
+    return () => window.removeEventListener("resize", measureFit);
   }, []);
 
   useLayoutEffect(() => {
@@ -333,7 +381,13 @@ export function StatsSection() {
       counterRow!.style.transform = `translateY(${-rowOffsetPxRef.current * (1 - eased)}px)`;
     }
 
-    if (reducedMotion) {
+    if (reducedMotion || !isPinnable) {
+      // Not pinnable: falling back to a non-pinned, scroll-linked
+      // animation here would reintroduce the exact bug that made this
+      // section pin in the first place (the globe scrolling off-screen
+      // before its shrink finishes — see this component's own doc
+      // comment) — on a screen too short to hold the card at all, simply
+      // show the final (P=1) state, same as reduced motion.
       applyProgress(1);
       return;
     }
@@ -374,7 +428,7 @@ export function StatsSection() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", tick);
     };
-  }, [reducedMotion, inView]);
+  }, [reducedMotion, inView, isPinnable]);
 
   // ---- B) Count-up, once — UNCHANGED ----
   useLayoutEffect(() => {
@@ -451,15 +505,14 @@ export function StatsSection() {
     };
   }, [reducedMotion]);
 
-  // The pin's own height is normally "fill the viewport under the
-  // header", but must grow to fit CARD_MIN_HEIGHT_PX + its own insets on
-  // short screens — otherwise the card (floored at 560px) would overflow
-  // past the pin's own (fixed, viewport-based) box instead of the
-  // "section is taller" fallback the brief asks for. Reused for the
-  // wrapper's own height (pin height + scrub length) so the two stay
-  // consistent instead of the wrapper assuming a plain 100svh pin.
-  const pinHeightExpr = `max(calc(${CARD_MIN_HEIGHT_PX}px + 2 * ${VERTICAL_INSET}), calc(100svh - var(--header-h)))`;
-  const wrapperHeight = reducedMotion ? "auto" : `calc(${pinHeightExpr} + ${STATS_SCROLL_LENGTH_VH}vh)`;
+  const effectivelyPinned = isPinnable && !reducedMotion;
+  // Once `isPinnable` is true, `effectiveInsetPx` already guarantees
+  // `100svh - header - 2*inset >= CARD_MIN_HEIGHT_PX` by construction
+  // (see the fit-measurement effect above) — so the pin can simply fill
+  // "the viewport under the header" directly, no defensive `max()`
+  // needed the way a pure-CSS-only version would've needed one.
+  const pinHeightExpr = "calc(100svh - var(--header-h))";
+  const wrapperHeight = effectivelyPinned ? `calc(${pinHeightExpr} + ${STATS_SCROLL_LENGTH_VH}vh)` : "auto";
 
   return (
     <section ref={wrapperRef} className="relative w-full" style={{ height: wrapperHeight }} aria-label="Company stats">
@@ -468,12 +521,26 @@ export function StatsSection() {
         id="home-stats"
         className="relative w-full"
         style={
-          reducedMotion
-            ? { height: "auto" }
+          !effectivelyPinned
+            ? { height: "auto", paddingTop: VERTICAL_INSET, paddingBottom: VERTICAL_INSET, boxSizing: "border-box" }
             : {
                 position: "sticky",
                 top: "var(--header-h)",
                 height: pinHeightExpr,
+                // Top/bottom insets live here as PADDING, not as a
+                // margin-top on the card below — a margin on the card
+                // would collapse through the pin (no padding/border/
+                // overflow of its own to stop it), rendering as if the
+                // inset didn't exist: confirmed directly, the card's own
+                // top sat flush at the header's own edge (0px gap)
+                // instead of the inset away. Padding never collapses, so
+                // this is the structural fix, not a tweak to the inset's
+                // own value. `effectiveInsetPx` (not the raw CSS clamp)
+                // because it may already be the shrunk, short-screen
+                // value — see the fit-measurement effect above.
+                paddingTop: effectiveInsetPx,
+                paddingBottom: effectiveInsetPx,
+                boxSizing: "border-box",
               }
         }
       >
@@ -482,8 +549,12 @@ export function StatsSection() {
           className="relative mx-auto overflow-hidden"
           style={{
             width: `min(calc(100% - 2 * ${SIDE_INSET}), ${CARD_MAX_WIDTH_PX}px)`,
-            height: `max(${CARD_MIN_HEIGHT_PX}px, calc(100% - 2 * ${VERTICAL_INSET}))`,
-            marginTop: VERTICAL_INSET,
+            // "100%" resolves against the pin's own CONTENT box (its
+            // padding, set above, is already subtracted) when pinned —
+            // no second inset subtraction needed here. Not pinned: a
+            // flat minimum, just enough for the globe/counter to size
+            // against in this rare (very short viewport) fallback.
+            height: effectivelyPinned ? `max(${CARD_MIN_HEIGHT_PX}px, 100%)` : `${CARD_MIN_HEIGHT_PX}px`,
             backgroundColor: CARD_BG,
             borderRadius: CARD_RADIUS,
           }}
