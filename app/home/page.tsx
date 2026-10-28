@@ -1,6 +1,7 @@
 import { HomeHeroParallax } from "@/components/home/hero-parallax/HomeHeroParallax";
 import { HomeCompany } from "@/components/HomeCompany";
 import { SiteHeader } from "@/components/layout/site-header";
+import { SmoothScroll } from "@/components/shared/smooth-scroll";
 
 /**
  * "Homepage" — Hero and Company exist in Figma so far (confirmed via
@@ -15,10 +16,16 @@ import { SiteHeader } from "@/components/layout/site-header";
  * site-header.tsx) fires exactly when the pin lets go, with no changes to
  * that shared component needed. This replaces the temporary
  * `#home-hero-end` sentinel div used before Company existed.
+ *
+ * <SmoothScroll /> is mounted here, not in the root layout — Home is the
+ * only page asking for inertia scrolling right now (see that component's
+ * own doc comment for why this is "on" simply by being rendered, with no
+ * separate toggle prop needed).
  */
 export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col items-start justify-start">
+      <SmoothScroll />
       <SiteHeader triggerId="home-company" />
       <HomeHeroParallax />
       <HomeCompany />

@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, type AnchorHTMLAttributes, type MouseEvent, type ReactNode } from "react";
+import { getLenis } from "./smooth-scroll";
+
+function headerHeight() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--header-h");
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
+}
 
 /**
  * Scrolls to the section with `targetId`, respecting its own
@@ -16,6 +23,17 @@ import { useEffect, type AnchorHTMLAttributes, type MouseEvent, type ReactNode }
  * instant jump regardless (used for the initial-hash correction, where an
  * animated scroll immediately on page load would be unwanted even for
  * motion-OK users — see ScrollHashOnLoad).
+ *
+ * When Lenis (components/shared/smooth-scroll.tsx) is active on the
+ * current page, routes through `lenis.scrollTo()` instead of the native
+ * `scrollIntoView` — native smooth scroll and Lenis both try to own the
+ * scroll position, so running both at once fights itself. Lenis's own
+ * `offset` takes the place of `scroll-margin-top` here (negative, so the
+ * landing stops `headerHeight` px short of the target's own top, leaving
+ * it sitting just below the header — same clearance, computed the same
+ * way, just handed to a different scroller). `getLenis()` returns null
+ * on every page that doesn't mount `<SmoothScroll />`, so this is a
+ * no-op fallback to the original native behavior everywhere else.
  */
 export function scrollToSection(
   targetId: string,
@@ -24,9 +42,18 @@ export function scrollToSection(
   const target = document.getElementById(targetId);
   if (!target) return;
 
-  const resolvedBehavior =
-    behavior ??
-    (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const resolvedBehavior = behavior ?? (reduced ? "auto" : "smooth");
+
+  const lenis = getLenis();
+  if (lenis) {
+    lenis.scrollTo(target, {
+      offset: -headerHeight(),
+      immediate: resolvedBehavior === "auto",
+      onComplete: focusAfter ? () => target.focus({ preventScroll: true }) : undefined,
+    });
+    return; // Lenis's own onComplete already handles focusAfter — skip the native path below.
+  }
 
   target.scrollIntoView({ behavior: resolvedBehavior, block: "start" });
 

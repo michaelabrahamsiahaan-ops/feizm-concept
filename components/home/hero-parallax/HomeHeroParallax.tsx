@@ -7,6 +7,7 @@ import { ALERT_CUE_T, ALERT_SCENE_INDEX, SCENES, TOTAL, createRenderers, locate 
 import { ChevronRightIcon, SCENE_ICONS } from "./scene-icons";
 import { H, W } from "./map-data";
 import type { SceneRender } from "./scenes";
+import { getLenis } from "@/components/shared/smooth-scroll";
 
 const STAGE_W = W;
 const STAGE_H = H;
@@ -278,8 +279,19 @@ export function HomeHeroParallax() {
       last = now;
       const st = scrollState(), gT = st.p * TOTAL;
       const introT = clamp((now - loadAt) / 1000, 0, INTRO_MS / 1000);
-      gCur += (gT - gCur) * (1 - Math.exp(-dt * 7)); // same smoothing as the prototype — real per-frame dt, not a fixed guess
-      if (Math.abs(gT - gCur) < 0.0005) gCur = gT;
+      if (getLenis()) {
+        // Lenis is already smoothing the underlying scroll position (it
+        // moves window.scrollY itself, progressively, toward the real
+        // target — this project's own scroll listeners don't need to
+        // know Lenis exists for that part). Also running this component's
+        // OWN exponential smoothing on top would be smoothing an already-
+        // smoothed value — double lag, not double smoothness. Track the
+        // live (Lenis-smoothed) position directly instead.
+        gCur = gT;
+      } else {
+        gCur += (gT - gCur) * (1 - Math.exp(-dt * 7)); // same smoothing as the prototype — real per-frame dt, not a fixed guess
+        if (Math.abs(gT - gCur) < 0.0005) gCur = gT;
+      }
 
       const at = introT < INTRO_MS / 1000 && gCur < 0.001 ? { i: 0, t: introT } : locate(gCur);
       draw(at.i, at.t, now);
@@ -316,7 +328,14 @@ export function HomeHeroParallax() {
     // inside the target scene — same lesson as SiteHeader's own landing
     // epsilon (site-header.tsx).
     const p = (SCENES[i].off + 0.05) / TOTAL;
-    window.scrollTo({ top: wrapperTopAbs + p * span, behavior: "smooth" });
+    const targetY = wrapperTopAbs + p * span;
+    // Native smooth scroll and Lenis both try to own the scroll position
+    // — running both at once fights itself. Route through Lenis when
+    // it's active (same computed targetY, just handed to Lenis's own
+    // scrollTo instead of the browser's).
+    const lenis = getLenis();
+    if (lenis) lenis.scrollTo(targetY);
+    else window.scrollTo({ top: targetY, behavior: "smooth" });
   }
 
   return (
