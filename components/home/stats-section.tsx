@@ -5,90 +5,91 @@ import { Building, CalendarFold, Earth, Truck } from "lucide-react";
 import type { ComponentType } from "react";
 import { HalftoneGlobeWidget } from "@/components/HalftoneGlobeWidget";
 
-const SECTION_W = 1440; // Figma frame width — all 3 keyframes share this
-const SECTION_H = 820; // Figma frame height — unchanged across all 3 keyframes
-const CONTENT_W = SECTION_W - 2 * 40; // minus spacing-40 x padding
-const CONTENT_H = SECTION_H - 2 * 60; // minus spacing-60 y padding
+// ---- Card: fluid, fits the viewport under the header ----
+// Figma's own section padding (40px sides / 60px top+bottom at its 1440
+// reference width) re-expressed as fluid clamps so the card scales with
+// any monitor instead of staying a fixed 1440px box. SIDE_INSET's clamp
+// is exactly as specified (40/1440 = 2.8vw); VERTICAL_INSET extrapolates
+// the same ratio-of-min/max-to-preferred shape from Figma's 60px value
+// (60/1440 = 4.17vw, with min/max scaled by the same 40%/160% ratio
+// SIDE_INSET's own 16px/64px bounds use relative to its own 40px
+// preferred value) — the brief only specified the side formula
+// explicitly, so this is the most consistent extrapolation for the
+// unspecified top/bottom one, not a separate arbitrary guess.
+const SIDE_INSET = "clamp(16px, 2.8vw, 64px)";
+const VERTICAL_INSET = "clamp(24px, 4.17vw, 96px)";
+const CARD_MAX_WIDTH_PX = 1600;
+const CARD_MIN_HEIGHT_PX = 560;
+const CARD_BG = "#FBFBFB"; // Figma's own card fill (rgb 251,251,251) — see this component's own doc comment
+const CARD_RADIUS = 0; // Figma's own value — literally unrounded, despite looking card-like
+
+// ---- Counter row: Figma insets from the CARD, as % (identical across
+// all 3 keyframes) ----
+const ROW_LEFT_PCT = 1.7647; // 24 / 1360
+const ROW_WIDTH_PCT = 96.5441; // 1313 / 1360
+const ROW_BOTTOM_INSET_PCT = 3.0; // 21 / 700 (card height)
+// How far ABOVE its Figma resting position the row starts (P=0), as a %
+// of card height — NOT Figma-sourced (all 3 keyframes show the row
+// static; "moves down" is a web-only enhancement, same precedent as the
+// previous build), but now interpreted as "moves down INTO the Figma
+// position" rather than "moves down PAST it" — the previous build's
+// bug (counter cut off by the viewport bottom) was exactly this: it
+// started AT the Figma-safe position and moved further down from there,
+// overshooting past the card's own safe inset. The Figma position is now
+// always the END state (P=1), never exceeded.
+const ROW_START_OFFSET_PCT = 8;
 
 // ---- Globe: read from the 3 Figma keyframes ("01/02/03 - Home / 03
-// Stats", nodes 159:131668 / 159:138854 / 159:146040) ----
-// Rim-circle center/radius per keyframe, in content-box coordinates.
-// Center X is EXACTLY 680 (= 1360/2, the content box's own horizontal
-// center) in all three — the globe never moves horizontally, only
-// shrinks and rises. `rotation: 0` on every keyframe too, confirmed by
-// the "no pink circle" investigation finding no actual 3D rotation —
-// what looks like a different part of the globe showing between
-// keyframe 1 and 2/3 is purely the crop: keyframe 1's globe is so large
-// that only its very top cap fits inside the 700px-tall content box.
-const GLOBE_KEYFRAMES = [
-  { centerY: 891, radius: 521.89 }, // P=0 (keyframe 01)
-  { centerY: 589, radius: 392.78 }, // P=0.5 (keyframe 02)
-  { centerY: 274, radius: 248.89 }, // P=1 (keyframe 03)
+// Stats", nodes 159:131668 / 159:138854 / 159:146040), as % of the
+// CARD's own width (size + x) and height (y) — using width for BOTH
+// size and x, rather than size-as-%-of-width and size-as-%-of-height
+// independently, is deliberate: the card's aspect ratio (1360:700 in
+// Figma) won't hold at other viewport sizes once it's fluid, and scaling
+// a circle by two different independent percentages would stretch it
+// into an ellipse. Center X is exactly 50% of card width in all three
+// keyframes (confirmed — the globe never moves horizontally, only
+// shrinks and rises) and `rotation: 0` on every keyframe (confirmed via
+// the earlier "no pink circle" investigation — the look of a different
+// part of the globe showing between keyframes is purely the crop,
+// keyframe 1's globe is so large only its very top cap fits in the card).
+const GLOBE_KEYFRAMES_PCT = [
+  { sizePctW: 98.6765, xPctW: 0.6618, yPctH: 31.4286 }, // P=0 (keyframe 01)
+  { sizePctW: 74.2647, xPctW: 12.8676, yPctH: 12.0 }, // P=0.5 (keyframe 02)
+  { sizePctW: 47.0588, xPctW: 26.4706, yPctH: -6.5714 }, // P=1 (keyframe 03)
 ];
-// The globe widget's own mount box, fixed at keyframe 01's exact
-// position/size (x:9, y:220, 1342x1342) — every other keyframe's state
-// is reproduced purely via `transform: translateY() scale()` on this
-// SAME box, per the brief's "transform/opacity only, no layout reflow"
-// rule. Scale pivots around the box's own CSS default transform-origin
-// (50% 50%) — which, not by accident, lands exactly on keyframe 01's own
-// rim center (9+1342/2, 220+1342/2) = (680, 891): no separate anchor
-// element is needed (the brief's "pink circle" — searched for
-// exhaustively across all 3 keyframes' full node trees, including every
-// one of the ~7000 individual dot vectors per keyframe, and it isn't a
-// real layer in the document at all, most likely a Figma comment pin —
-// would have marked this exact point).
-const GLOBE_BASE = { x: 9, y: 220, size: 1342 };
-const GLOBE_BASE_CENTER_Y = GLOBE_BASE.y + GLOBE_BASE.size / 2; // 891, matches keyframe 01 exactly
 // The widget's own DEFAULTS (dotColor/rimColor) are white/near-black,
-// meant for a dark hero-style background — invisible against this
-// section's white one. Read directly off Figma's own "dots"/"rim"
-// layers: both rgb(73,73,73) — rim additionally at 25% opacity in
-// Figma, baked into this rgba() since the widget applies none of its own.
+// meant for a dark hero-style background — invisible against this card's
+// near-white one. Read directly off Figma's own "dots"/"rim" layers:
+// both rgb(73,73,73) — rim additionally at 25% opacity in Figma, baked
+// into this rgba() since the widget applies none of its own.
 const GLOBE_DOT_COLOR = "#494949";
 const GLOBE_RIM_COLOR = "rgba(73,73,73,0.25)";
 
 // ---- Scroll-linked progress (A) ----
-// Pinned: P=0 the moment the section becomes sticky (its natural top
-// would otherwise pass the header's bottom edge — same condition
-// site-header.tsx's own overlay->solid trigger and HomeCompany's text-
-// appear trigger both use, just enforced here by CSS `position: sticky`
-// itself rather than a computed scrollY threshold), held for
-// STATS_SCROLL_LENGTH_VH (80vh) of scroll before releasing at P=1 — same
-// extended-wrapper + sticky-stage mechanism HomeHeroParallax already
-// uses. This was NOT the first design tried: a no-pin version (just
-// interpolating a property over a fixed scroll distance while the
-// section scrolled normally, the same technique HomeCompany's pattern-
-// fill/text-sweep use) was built and measured first, and failed
-// concretely — at P=1 the section's own normal scroll motion had ALREADY
-// carried the globe wrapper's bottom edge up to y=9px in the viewport
-// (9px of the shrunk globe left visible, confirmed via
-// getBoundingClientRect()), because nothing was holding the composition
-// in the viewport while its properties changed. Company's reveal-while-
-// passing-through effects don't need that; this one — "the same
-// viewport-locked view, properties interpolate" — is the same category
-// as Hero's own scene-scrubbing, and needs the same fix.
+// Pinned — see this component's own doc comment for the fuller
+// reasoning (a no-pin version was tried first and concretely failed: at
+// P=1 the section's own normal scroll motion had already carried the
+// globe off the top of the viewport, because nothing was holding the
+// composition in place while its properties changed).
 const STATS_SCROLL_LENGTH_VH = 80;
-// How far the counter row moves down at P=1. NOT sourced from Figma —
-// all 3 keyframes show Frame 8 at the exact same (24, 538.07) position,
-// confirmed by comparing every keyframe's own measurements; "moves down"
-// is a web-only enhancement with no Figma-given distance. Kept modest
-// and tied to the section's own fixed geometry rather than the globe's
-// full 617px of vertical travel: the row's own bottom sits just 21px
-// above the content box's bottom edge at P=0 (538.07+140.93=679 vs
-// content box height 700), and the section's total height doesn't grow
-// for this animation (same "transform only, no reflow" rule) — 64px
-// (one more spacing-64 token's worth) leaves the row comfortably inside
-// the section's own 60px bottom padding (21+64=85 < 120px of total
-// clearance to the section's hard 820px edge) with no risk of clipping.
-const COUNTER_TRANSLATE_Y_PX = 64;
 
 // ---- Count-up (B) ----
 const COUNT_UP_DURATION_MS = 1200;
 const COUNT_UP_STAGGER_MS = 80;
-// Toggle to compare simultaneous vs. staggered count-up — see this
-// component's own verification notes for both variants.
 const ENABLE_COUNT_STAGGER = true;
 const COUNT_VISIBLE_THRESHOLD = 0.5; // "counter row at least 50% visible"
+
+// ---- Typography: fluid number size ----
+// Figma's own 59.87px at its 1440 reference width is the clamp's
+// PREFERRED value AND its max (59.87/1440 = 4.157vw) — deliberately
+// capped there rather than left to keep growing past 1440: the card
+// itself stops growing around ~1695px wide (CARD_MAX_WIDTH_PX, reached
+// earlier than that via SIDE_INSET's own 64px ceiling), so letting the
+// number keep scaling with raw vw past the Figma reference would
+// eventually outgrow the cell it was sized for. MIN (32px) is a safety
+// floor for the narrower end of the range this section is actually
+// tested at (1280px) — "50.000+" fits comfortably there (verified).
+const NUMBER_FONT_SIZE = "clamp(32px, 4.157vw, 59.87px)";
 
 function clamp(v: number, a: number, b: number) {
   return v < a ? a : v > b ? b : v;
@@ -130,102 +131,117 @@ const STATS: Stat[] = [
 ];
 
 /**
- * "Stats" section of the Feizm Homepage, scroll-animated per the brief
- * built on top of three Figma keyframes ("01/02/03 - Home / 03 Stats") —
- * see the constants above for exactly what was read from each and how.
+ * "Stats" section of the Feizm Homepage, built on top of three Figma
+ * keyframes ("01/02/03 - Home / 03 Stats") — see the constants above for
+ * exactly what was read from each and how.
  *
- * ---- A) Globe shrink + counter move (scroll-linked, reversible) ----
- * Pinned — see STATS_SCROLL_LENGTH_VH's own comment for why a no-pin
- * version was tried first and concretely failed. One progress value P
- * (0->1), computed fresh from the pin's own live sticky-scrub position
- * every tick (not accumulated/eased in JS state — see HomeCompany's own
- * "--p is a pure function of scrollY" precedent and HomeHeroParallax's
- * own `scrollState()`, which this directly reuses the formula from): 0
- * the moment the section becomes sticky, 1 once the wrapper's own
- * STATS_SCROLL_LENGTH_VH of extra height has been scrolled through.
- * Lenis-compatible for free: Lenis moves the real `window.scrollY` and
- * dispatches native scroll events, so the plain `scroll` listener below
- * already reads Lenis-smoothed positions with no special-casing
- * (confirmed pattern, see HomeCompany/HomeHeroParallax's own comments on
- * this).
+ * ---- Fluid card (fixing the previous build) ----
+ * The previous build never rendered Figma's own light-gray card
+ * (`#FBFBFB`, read off "Frame 1362793307"'s own fill, previously used
+ * only for measurement) — the globe floated directly over the page, the
+ * counter cells had no opaque background (dots showed through labels),
+ * and everything was a fixed 1440x820 box that didn't fit shorter/
+ * narrower monitors. Now:
+ *   - the CARD is a real element: `background: #FBFBFB`, `overflow:
+ *     hidden` (clipping the globe, same as Figma's own `clipsContent`),
+ *     no border-radius (Figma's own value is 0, despite looking
+ *     card-like).
+ *   - width: `min(100% - 2*SIDE_INSET, 1600px)`, auto-centered once
+ *     capped.
+ *   - height: `max(560px, 100% of the pin's own height - 2*
+ *     VERTICAL_INSET)` — the PIN itself (see below) is already sized to
+ *     exactly fill the viewport under the header, so subtracting the
+ *     header height a second time here isn't needed; "100%" here
+ *     resolves against the pin's own definite height.
+ *   - the counter row gets its OWN opaque white background (Figma has
+ *     this on the row as a whole, not per-cell — same visual result
+ *     either way; doing it once on the row is simpler) and sits ABOVE
+ *     the globe via z-index, so dots never show through a label again.
  *
- * `easeInOutCubic(P)` is applied once, then used as the parameter for a
- * piecewise-linear interpolation across the 3 keyframes (0->0.5->1) —
- * this keeps the motion smooth across the whole range while still
- * landing exactly on each keyframe's own values at P=0/0.5/1 (the cubic
- * passes through (0.5, 0.5) exactly, so the midpoint keyframe lands
- * precisely at the midpoint of the motion, not skewed).
+ * ---- Card-relative animation (percentages, not fixed px) ----
+ * The 3 keyframes' globe size/position and the counter row's own
+ * geometry are stored as PERCENTAGES of the card (see the constants
+ * above), converted to real pixels via a `ResizeObserver` on the card
+ * itself (not just a window resize listener — the card's rendered size
+ * can change for reasons other than the window resizing, e.g. the
+ * header's own height changing) and written as the globe/counter
+ * elements' base (non-animated) `left/top/width/height`. The PER-TICK
+ * scroll-driven animation still only ever touches `transform`
+ * (translateY + scale) on top of that resize-updated base — same
+ * "transform/opacity only, no layout reflow" performance rule as
+ * before, just with the base values now responsive. Globe SIZE and
+ * X-position scale off the card's WIDTH, Y-position off its HEIGHT
+ * (never size independently off both axes — see GLOBE_KEYFRAMES_PCT's
+ * own comment for why that would stretch the circle into an ellipse
+ * once the card's aspect ratio stops matching Figma's 1360:700).
  *
- * Every property changes via `transform` only (translateY + scale on the
- * globe's own fixed-size mount box; translateY on the counter row) — no
- * top/left/width writes, so this never triggers layout. The globe
- * widget's own internal canvas is NEVER told to resize/redraw for this:
- * CSS transforms don't fire ResizeObserver, so its one rAF loop keeps
- * drawing the SAME fixed-resolution canvas (rotation/routes/pulse still
- * live — kept per explicit request over the lighter but fully-static SVG
- * export) while our transform scales the whole thing visually.
+ * Counter row: base (P=1, resting) position is Figma's own insets
+ * (left/width/bottom, all %-of-card). The P=0 "start" position is
+ * `ROW_START_OFFSET_PCT` of card height ABOVE that, reached via
+ * `transform: translateY()` — i.e. the row moves DOWN INTO the Figma
+ * position as P goes 0->1, never past it, fixing the previous build's
+ * "cut off by the viewport bottom" bug (which moved it further down
+ * FROM the already-safe Figma position instead of toward it).
  *
- * ---- B) Count-up (time-based, once) ----
+ * ---- Progress P, pin ----
+ * Unchanged mechanism from the previous build: pinned (see
+ * STATS_SCROLL_LENGTH_VH's own comment for why a no-pin version was
+ * tried first and failed), `P = clamp(-wrapper.rect.top / span, 0, 1)`
+ * where `span` is the wrapper's own extra height beyond the pin
+ * (STATS_SCROLL_LENGTH_VH). `easeInOutCubic(P)` feeds a piecewise-linear
+ * interpolation across the 3 keyframes (0->0.5->1), landing exactly on
+ * each keyframe at P=0/0.5/1. The PIN itself is sized to exactly fill
+ * the viewport under the header (`height: calc(100svh - var(--header-h))`,
+ * `top: var(--header-h)`) and the CARD is centered within it with its own
+ * fluid height — so "the card is fully in view under the header" at P=0
+ * and "still fully visible" at P=1 both follow directly from the pin's
+ * own sizing, not a separate check.
+ *
+ * ---- B) Count-up (time-based, once) — UNCHANGED ----
  * Trigger: counter row >= 50% visible (real IntersectionObserver,
  * threshold 0.5), latched via `countedRef` so it can never replay.
- * SSR/SEO: the JSX always renders the FINAL formatted string
- * ("10+"/"500+"/"50.000+"/"5+") as real text content — nothing is ever
- * rendered as "0" server-side. The animating `<span aria-hidden>` is
- * only ever mutated via direct `textContent` writes from the rAF loop
- * (same "direct DOM write for continuous values" convention as every
- * other scroll-driven effect in this project), and the wrapping stat
- * element carries `aria-label` with the real final value so screen
- * readers always get "10+", never the changing digits mid-count.
+ * SSR/SEO: the JSX always renders the FINAL formatted string as real
+ * text content; the animating `<span aria-hidden>` is only ever mutated
+ * via direct `textContent` writes, and the wrapping stat element carries
+ * `aria-label` with the real final value for screen readers. No flash of
+ * the final value before the count starts: a pre-paint synchronous
+ * visibility check decides whether to hide the digits at all, before the
+ * real IntersectionObserver takes over watching for the 50% crossing.
+ * `prefers-reduced-motion` skips this whole effect.
  *
- * No flash of the final value before the count starts: a
- * `useLayoutEffect` runs synchronously pre-paint and does a ONE-TIME
- * synchronous visibility check (not the IO's own first callback, which
- * fires asynchronously) — if the row is already >=50% visible right then
- * (e.g. a mid-section refresh), nothing is hidden and nothing animates:
- * the SSR-rendered final value is correct and simply stays. Only if it's
- * NOT yet visible does this same pre-paint effect hide the digits
- * (`opacity: 0`, written directly, no React state/re-render involved)
- * before the browser's first paint, then sets up the real
- * IntersectionObserver to catch the moment it crosses 50% and run the
- * count. `prefers-reduced-motion` skips this whole effect — the SSR
- * final value is simply left alone, fully visible, no hide, no count.
- *
- * ---- Integration ----
- * Header: no changes needed. site-header.tsx's trigger watches
- * `#home-company`'s own top edge, which only moves further negative as
- * the user scrolls into this (later) section — stays solid automatically,
- * and this section's own sticky `top: var(--header-h)` sits it exactly
- * below that already-solid header.
- * Company: no overlapping scroll ranges are possible by construction —
- * this section's own pin can't engage until Company has fully scrolled
- * past, since Stats doesn't reach the header before that regardless of
- * Company's own animation timing. Exact scrollY ranges for both are
- * measured and reported in this change's own verification notes, not
- * hardcoded here.
- *
- * ---- Scope note: responsive ----
- * Below 1024px this section still renders at the same fixed 1440 width
- * (same convention this section has used since its first build, and
- * unchanged by this pass) — the brief asked for the shrink/count-up
- * animation here, not a ground-up responsive rebuild of the 4-card row
- * into a 2x2/1-column grid, which is a separate, larger task with its
- * own breakpoint decisions. "Scale proportionally" was chosen for THAT
- * eventual rebuild; there's nothing to scale yet while the section
- * itself doesn't reflow below 1024px.
+ * ---- Integration — UNCHANGED ----
+ * Header: site-header.tsx's own trigger (watching `#home-company`'s top
+ * edge) stays solid automatically through this section. Company: no
+ * overlapping scroll ranges are possible by construction — this
+ * section's pin can't engage until Company has fully scrolled past.
  *
  * ---- Reduced motion ----
- * No scroll listener, no rAF loops at all: the globe/counter transforms
- * jump straight to their P=1 state and the SSR final numbers are simply
- * left alone (already correct, see B above) — final frame, immediately,
- * exactly per spec.
+ * No scroll listener, no rAF loop: the globe/counter transforms jump
+ * straight to their P=1 state and the SSR final numbers are simply left
+ * alone — final frame, immediately. The pin itself is skipped too (plain
+ * `position: relative`, `height: auto`), same precedent as every other
+ * pinned section in this project.
  */
 export function StatsSection() {
   const wrapperRef = useRef<HTMLElement | null>(null);
   const pinRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const globeWrapRef = useRef<HTMLDivElement | null>(null);
   const counterRowRef = useRef<HTMLDivElement | null>(null);
   const numberRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const countedRef = useRef(false);
+
+  // Base (non-animated) geometry, recomputed from the card's own measured
+  // size on mount/resize (see the ResizeObserver effect below) and read
+  // by the scroll-tick effect to compute each frame's `transform`. Refs,
+  // not state: these feed a per-frame rAF loop, not React renders.
+  const globeKeyframesPxRef = useRef<{ centerY: number; radius: number }[]>([
+    { centerY: 0, radius: 1 },
+    { centerY: 0, radius: 1 },
+    { centerY: 0, radius: 1 },
+  ]);
+  const globeBaseCenterYRef = useRef(0);
+  const rowOffsetPxRef = useRef(0);
 
   const [reducedMotion, setReducedMotion] = useState(false);
   const [inView, setInView] = useState(false);
@@ -249,6 +265,45 @@ export function StatsSection() {
     return () => io.disconnect();
   }, []);
 
+  // Converts the card's own measured size into real pixels for the
+  // globe's base box and keyframes, and the counter row's base position
+  // and start-offset — see this component's own "Card-relative animation"
+  // doc comment. Re-runs on every card resize (ResizeObserver), not just
+  // window resize, per the brief.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const globeWrap = globeWrapRef.current;
+    const counterRow = counterRowRef.current;
+    if (!card || !globeWrap || !counterRow) return;
+
+    function applyCardGeometry() {
+      const w = card!.clientWidth;
+      const h = card!.clientHeight;
+      if (w === 0 || h === 0) return;
+
+      const base = GLOBE_KEYFRAMES_PCT[0];
+      globeWrap!.style.left = `${(base.xPctW / 100) * w}px`;
+      globeWrap!.style.top = `${(base.yPctH / 100) * h}px`;
+      globeWrap!.style.width = `${(base.sizePctW / 100) * w}px`;
+      globeWrap!.style.height = `${(base.sizePctW / 100) * w}px`;
+      globeBaseCenterYRef.current = (base.yPctH / 100) * h + ((base.sizePctW / 100) * w) / 2;
+      globeKeyframesPxRef.current = GLOBE_KEYFRAMES_PCT.map((kf) => {
+        const sizePx = (kf.sizePctW / 100) * w;
+        return { centerY: (kf.yPctH / 100) * h + sizePx / 2, radius: sizePx / 2 };
+      });
+
+      counterRow!.style.left = `${(ROW_LEFT_PCT / 100) * w}px`;
+      counterRow!.style.width = `${(ROW_WIDTH_PCT / 100) * w}px`;
+      counterRow!.style.bottom = `${(ROW_BOTTOM_INSET_PCT / 100) * h}px`;
+      rowOffsetPxRef.current = (ROW_START_OFFSET_PCT / 100) * h;
+    }
+
+    applyCardGeometry();
+    const ro = new ResizeObserver(applyCardGeometry);
+    ro.observe(card);
+    return () => ro.disconnect();
+  }, []);
+
   // ---- A) Scroll-linked globe shrink + counter move (pinned) ----
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
@@ -259,20 +314,23 @@ export function StatsSection() {
 
     function applyProgress(p: number) {
       const eased = easeInOutCubic(p);
+      const kf = globeKeyframesPxRef.current;
       let centerY: number, radius: number;
       if (eased <= 0.5) {
         const t = eased / 0.5;
-        centerY = lerp(GLOBE_KEYFRAMES[0].centerY, GLOBE_KEYFRAMES[1].centerY, t);
-        radius = lerp(GLOBE_KEYFRAMES[0].radius, GLOBE_KEYFRAMES[1].radius, t);
+        centerY = lerp(kf[0].centerY, kf[1].centerY, t);
+        radius = lerp(kf[0].radius, kf[1].radius, t);
       } else {
         const t = (eased - 0.5) / 0.5;
-        centerY = lerp(GLOBE_KEYFRAMES[1].centerY, GLOBE_KEYFRAMES[2].centerY, t);
-        radius = lerp(GLOBE_KEYFRAMES[1].radius, GLOBE_KEYFRAMES[2].radius, t);
+        centerY = lerp(kf[1].centerY, kf[2].centerY, t);
+        radius = lerp(kf[1].radius, kf[2].radius, t);
       }
-      const scale = radius / GLOBE_KEYFRAMES[0].radius;
-      const translateY = centerY - GLOBE_BASE_CENTER_Y;
+      const scale = radius / kf[0].radius;
+      const translateY = centerY - globeBaseCenterYRef.current;
       globeWrap!.style.transform = `translateY(${translateY}px) scale(${scale})`;
-      counterRow!.style.transform = `translateY(${eased * COUNTER_TRANSLATE_Y_PX}px)`;
+      // Moves DOWN into its resting (Figma) position as eased goes 0->1
+      // — see ROW_START_OFFSET_PCT's own comment.
+      counterRow!.style.transform = `translateY(${-rowOffsetPxRef.current * (1 - eased)}px)`;
     }
 
     if (reducedMotion) {
@@ -286,10 +344,8 @@ export function StatsSection() {
     // `span` is how much scroll room the wrapper provides BEYOND the
     // pin's own height — exactly STATS_SCROLL_LENGTH_VH, by construction
     // of the wrapper's own CSS height below. Self-contained: the wrapper
-    // supplies its own scroll room, so (unlike the no-pin version this
-    // replaced) this never depends on there being enough content AFTER
-    // this section — works correctly even with Stats as the last section
-    // on the page.
+    // supplies its own scroll room, so this never depends on there being
+    // enough content after this section.
     function scrollProgress() {
       const rect = wrapper!.getBoundingClientRect();
       const span = rect.height - pin!.clientHeight;
@@ -320,15 +376,9 @@ export function StatsSection() {
     };
   }, [reducedMotion, inView]);
 
-  // ---- B) Count-up, once ----
+  // ---- B) Count-up, once — UNCHANGED ----
   useLayoutEffect(() => {
     if (reducedMotion) {
-      // Explicitly restore visibility, not just "do nothing": this effect
-      // can run once already (hiding the digits pre-paint, below) BEFORE
-      // the separate matchMedia-detection effect corrects `reducedMotion`
-      // from its SSR-safe `false` default to `true` — a plain early
-      // return here would leave them stuck hidden from that earlier pass
-      // instead of showing the final values immediately, per spec.
       for (const el of numberRefs.current) {
         if (el) el.style.opacity = "1";
       }
@@ -364,10 +414,6 @@ export function StatsSection() {
           const current = stat.value * easeOutCubic(local);
           el.textContent = formatThousands(current) + stat.suffix;
         });
-        // totalDuration already accounts for the last number's own
-        // stagger delay plus its own full duration, so elapsed crossing
-        // it means every number has already written its exact final
-        // (not just eased-to-1) text — stop scheduling frames.
         if (elapsed < totalDuration) {
           raf = requestAnimationFrame(frame);
         }
@@ -376,9 +422,6 @@ export function StatsSection() {
       return () => cancelAnimationFrame(raf);
     }
 
-    // Synchronous, pre-paint check — NOT the IntersectionObserver's own
-    // first callback, which fires asynchronously and would let the
-    // SSR-rendered final value visibly flash before any hide could apply.
     if (visibleFraction() >= COUNT_VISIBLE_THRESHOLD) {
       countedRef.current = true;
       return;
@@ -408,47 +451,48 @@ export function StatsSection() {
     };
   }, [reducedMotion]);
 
-  // Wrapper height: the pin's own 820px + STATS_SCROLL_LENGTH_VH of hold
-  // room — same `pinHeight + scrubDistance` formula as HomeHeroParallax's
-  // own wrapper. "auto" under reduced motion: no scroll-jacking area at
-  // all, same precedent as Hero/Company's own reduced-motion branches.
-  const wrapperHeight = reducedMotion ? "auto" : `calc(${SECTION_H}px + ${STATS_SCROLL_LENGTH_VH}vh)`;
+  // The pin's own height is normally "fill the viewport under the
+  // header", but must grow to fit CARD_MIN_HEIGHT_PX + its own insets on
+  // short screens — otherwise the card (floored at 560px) would overflow
+  // past the pin's own (fixed, viewport-based) box instead of the
+  // "section is taller" fallback the brief asks for. Reused for the
+  // wrapper's own height (pin height + scrub length) so the two stay
+  // consistent instead of the wrapper assuming a plain 100svh pin.
+  const pinHeightExpr = `max(calc(${CARD_MIN_HEIGHT_PX}px + 2 * ${VERTICAL_INSET}), calc(100svh - var(--header-h)))`;
+  const wrapperHeight = reducedMotion ? "auto" : `calc(${pinHeightExpr} + ${STATS_SCROLL_LENGTH_VH}vh)`;
 
   return (
     <section ref={wrapperRef} className="relative w-full" style={{ height: wrapperHeight }} aria-label="Company stats">
       <div
         ref={pinRef}
         id="home-stats"
-        className="w-full overflow-hidden"
-        style={{
-          ...(reducedMotion
-            ? { position: "relative" }
-            : // Sticks right below the header, same `--header-h` custom
-              // property every other section's scroll-margin/trigger math
-              // already uses (site-header.tsx publishes it).
-              { position: "sticky", top: "var(--header-h)" }),
-          width: SECTION_W,
-          height: SECTION_H,
-          backgroundColor: "var(--fig-color-neutral-0)",
-          paddingLeft: "var(--fig-spacing-40)",
-          paddingRight: "var(--fig-spacing-40)",
-          paddingTop: "var(--fig-spacing-60)",
-          paddingBottom: "var(--fig-spacing-60)",
-          fontFamily: "var(--font-hanken-grotesk)",
-        }}
+        className="relative w-full"
+        style={
+          reducedMotion
+            ? { height: "auto" }
+            : {
+                position: "sticky",
+                top: "var(--header-h)",
+                height: pinHeightExpr,
+              }
+        }
       >
-        <div className="relative" style={{ width: CONTENT_W, height: CONTENT_H }}>
+        <div
+          ref={cardRef}
+          className="relative mx-auto overflow-hidden"
+          style={{
+            width: `min(calc(100% - 2 * ${SIDE_INSET}), ${CARD_MAX_WIDTH_PX}px)`,
+            height: `max(${CARD_MIN_HEIGHT_PX}px, calc(100% - 2 * ${VERTICAL_INSET}))`,
+            marginTop: VERTICAL_INSET,
+            backgroundColor: CARD_BG,
+            borderRadius: CARD_RADIUS,
+          }}
+        >
           <div
             ref={globeWrapRef}
             aria-hidden="true"
             className="absolute"
-            style={{
-              left: GLOBE_BASE.x,
-              top: GLOBE_BASE.y,
-              width: GLOBE_BASE.size,
-              height: GLOBE_BASE.size,
-              transformOrigin: "center",
-            }}
+            style={{ transformOrigin: "center" }}
           >
             <HalftoneGlobeWidget
               className="h-full w-full"
@@ -460,7 +504,11 @@ export function StatsSection() {
             />
           </div>
 
-          <div ref={counterRowRef} className="absolute flex" style={{ left: 24, top: 538.07, width: 1313 }}>
+          <div
+            ref={counterRowRef}
+            className="absolute z-10 flex"
+            style={{ backgroundColor: "#FFFFFF", fontFamily: "var(--font-hanken-grotesk)" }}
+          >
             {STATS.map((stat, i) => {
               const { label, icon: Icon, value, suffix } = stat;
               const finalText = formatThousands(value) + suffix;
@@ -480,7 +528,7 @@ export function StatsSection() {
                     </span>
                     <Icon size={24} color={ICON_COLOR} strokeWidth={2} />
                   </div>
-                  <span aria-label={finalText} className="font-normal" style={{ fontSize: "59.87px", lineHeight: "59.87px", color: "var(--fig-color-neutral-900)" }}>
+                  <span aria-label={finalText} className="font-normal" style={{ fontSize: NUMBER_FONT_SIZE, lineHeight: 1, color: "var(--fig-color-neutral-900)", whiteSpace: "nowrap" }}>
                     <span
                       aria-hidden="true"
                       ref={(el) => {
