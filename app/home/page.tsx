@@ -1,5 +1,6 @@
 import { HomeHeroParallax } from "@/components/home/hero-parallax/HomeHeroParallax";
 import { HomeCompany } from "@/components/HomeCompany";
+import { StatsSection } from "@/components/home/stats-section";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SmoothScroll } from "@/components/shared/smooth-scroll";
 
@@ -21,6 +22,22 @@ import { SmoothScroll } from "@/components/shared/smooth-scroll";
  * only page asking for inertia scrolling right now (see that component's
  * own doc comment for why this is "on" simply by being rendered, with no
  * separate toggle prop needed).
+ *
+ * StatsSection is pinned (see its own doc comment) and provides almost
+ * all its own scroll room via its wrapper's CSS height — much less
+ * dependent on content after it than a no-pin scroll-linked effect would
+ * be, but not fully independent: a sticky element still needs its OWN
+ * height worth of normal document flow to release into once its hold
+ * ends, and with nothing after it that only resolves if the viewport is
+ * at least that tall. At 1440x900 (pin height 820px) this section falls
+ * exactly 80px (900-820) short of ever reaching P=1 with nothing below
+ * it — confirmed by measurement, not guessed.
+ *
+ * TEMPORARY: the small trailing spacer below exists only to cover that
+ * 80px gap for now, generous at 100vh so it stays correct across
+ * reasonable viewport heights too. Delete it once a real next section
+ * (e.g. "Home / 04 ...") exists below StatsSection and takes over
+ * providing it.
  */
 export default function HomePage() {
   return (
@@ -29,6 +46,8 @@ export default function HomePage() {
       <SiteHeader triggerId="home-company" />
       <HomeHeroParallax />
       <HomeCompany />
+      <StatsSection />
+      <div aria-hidden="true" style={{ height: "100vh" }} />
     </main>
   );
 }
