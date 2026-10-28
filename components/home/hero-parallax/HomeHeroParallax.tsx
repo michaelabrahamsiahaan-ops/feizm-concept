@@ -31,7 +31,7 @@ const REDUCED_STORY_VH = 100;
 // Both OFF under prefers-reduced-motion (see the component doc comment).
 // Flip this to compare with/without — see conversation for the request to
 // show both before picking one.
-const ENABLE_DEPTH_EFFECTS = true;
+const ENABLE_DEPTH_EFFECTS = false;
 const DEPTH_DARKEN_MAX_OPACITY = 0.3;
 const DEPTH_SCALE_MIN = 0.96;
 
