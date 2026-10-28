@@ -13,7 +13,6 @@ const DESKTOP_BREAKPOINT = 1024;
 // component doc comment for the exact formulas these feed into.
 const PATTERN_START_VIEWPORT_FRACTION = 1.0; // section top at the viewport's bottom edge (100%)
 const PATTERN_END_VIEWPORT_FRACTION = 0.2; // pattern's bottom edge at 20% from the viewport top
-const TEXT_START_VIEWPORT_FRACTION = 0.9; // heading's top at 90% of the viewport
 const TEXT_END_VIEWPORT_FRACTION = 0.25; // paragraph's bottom at 25% from the viewport top
 
 const APPEAR_DURATION_MS = 900;
@@ -48,6 +47,16 @@ function rgb([r, g, b]: [number, number, number]) {
 }
 function wordCount(text: string) {
   return text.split(/\s+/).filter(Boolean).length;
+}
+// Same live measurement SiteHeader/ScrollLink already use for the header's
+// own rendered height (site-header.tsx publishes it as this CSS custom
+// property via a ResizeObserver; globals.css gives it a same-valued
+// fallback for the one frame before that effect runs) — not a separate
+// guess, so this can never drift from the header's actual trigger point.
+function headerHeightPx() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--header-h");
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 
 /**
@@ -143,12 +152,16 @@ const headingWordCount = wordCount(HEADING_TEXT);
  *        reaches the viewport's bottom edge (100%); 1 at the scrollY
  *        where the PATTERN's own bottom edge reaches 20% from the
  *        viewport's top.
- *   --tp (text sweep):    0 at the scrollY where the HEADING's top
- *        reaches 90% of the viewport (same scrollY the appear trigger
- *        below uses); 1 at the scrollY where the PARAGRAPH's bottom
- *        reaches 25% from the viewport's top — THIS pair of endpoints is
- *        only the *configured* range; see "Two-phase sequencing" below
- *        for how it's actually applied.
+ *   --tp (text sweep):    0 at the scrollY where the SECTION's own top
+ *        reaches the header's bottom edge (same trigger SiteHeader's own
+ *        overlay->solid switch uses, and the same scrollY the appear
+ *        trigger below uses) — i.e. only once the Hero/Company overlap
+ *        (see that doc comment below) has fully closed and this section
+ *        fills the screen, not while it's still sliding up over the
+ *        Hero; 1 at the scrollY where the PARAGRAPH's bottom reaches 25%
+ *        from the viewport's top — THIS pair of endpoints is only the
+ *        *configured* range; see "Two-phase sequencing" below for how
+ *        it's actually applied.
  * --p is a pure function of scrollY (computed fresh from the live scroll
  * position every tick, not accumulated/eased), so scrolling back up
  * reverses it exactly.
@@ -219,13 +232,19 @@ const headingWordCount = wordCount(HEADING_TEXT);
  *
  * ---- Appear (one-way latch, not a range) ----
  * The moment scrollY first reaches the SAME threshold `--tp`'s 0-point
- * uses (heading's top at 90% viewport), `appearedRef` latches true and
- * the heading fades/slides in (opacity + translateY 24px->0, 900ms
- * ease-out), the paragraph 150ms later. Once latched, always latched —
- * scrolling back up never re-hides or re-plays it. Checked once on
- * mount too: if the page loads already past that scrollY (e.g. a
- * mid-section refresh), both are set straight to their visible end state
- * with no transition, so there's no stray animation on load.
+ * uses (section top at the header's bottom edge — i.e. the Hero/Company
+ * overlap has fully closed), `appearedRef` latches true and the heading
+ * fades/slides in (opacity + translateY 24px->0, 900ms ease-out), the
+ * paragraph 150ms later. Before this point the text stays fully hidden —
+ * including while the section is still sliding up over the Hero, partly
+ * visible but not yet "settled" — only the pattern (`--p`, unaffected by
+ * any of this) is already changing color during that slide. Once
+ * latched, always latched — scrolling back up never re-hides or re-plays
+ * it, not even back past the header threshold while the Hero becomes
+ * visible again underneath. Checked once on mount too: if the page loads
+ * already past that scrollY (e.g. a mid-section refresh), both are set
+ * straight to their visible end state with no transition, so there's no
+ * stray animation on load.
  *
  * ---- Reachability guarantee ----
  * Every END threshold (`patternEndY`, `textEndY`) is clamped to the
@@ -440,7 +459,6 @@ export function HomeCompany() {
       const sectionTopAbs = section!.getBoundingClientRect().top + window.scrollY;
       const patternRect = pattern!.getBoundingClientRect();
       const patternBottomAbs = patternRect.top + window.scrollY + patternRect.height;
-      const headingTopAbs = heading!.getBoundingClientRect().top + window.scrollY;
       const paragraphBottomAbs = paragraph!.getBoundingClientRect().top + window.scrollY + paragraph!.getBoundingClientRect().height;
 
       patternStartY = sectionTopAbs - PATTERN_START_VIEWPORT_FRACTION * vh;
@@ -448,7 +466,11 @@ export function HomeCompany() {
       patternEndY = Math.min(patternNaturalEnd, maxScrollY);
       patternEndY = Math.max(patternEndY, patternStartY + 1);
 
-      textStartY = headingTopAbs - TEXT_START_VIEWPORT_FRACTION * vh;
+      // Section top at the header's bottom edge — same condition
+      // site-header.tsx's own trigger uses for its overlay->solid switch
+      // (see that component), so text starts exactly when the Hero/
+      // Company overlap has fully closed, not mid-slide.
+      textStartY = sectionTopAbs - headerHeightPx();
       const textNaturalEnd = paragraphBottomAbs - TEXT_END_VIEWPORT_FRACTION * vh;
       textEndY = Math.min(textNaturalEnd, maxScrollY);
       textEndY = Math.max(textEndY, textStartY + 1);
