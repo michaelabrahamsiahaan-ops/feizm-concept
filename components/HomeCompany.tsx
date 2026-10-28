@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject, ReactNode } from "react";
+import { OVERLAP_VH } from "@/components/home/overlap-config";
 
 // ---- Tunable constants ----
 const SECTION_W = 1440; // desktop (>=DESKTOP_BREAKPOINT) Figma frame width
@@ -101,11 +102,36 @@ const headingWordCount = wordCount(HEADING_TEXT);
  * Static build details (copy/typography/tokens/pattern asset) are
  * unchanged from the original read of node 148:45272 — see git history.
  * This comment covers the animation layer, which replaces an earlier
- * pinned version of this section (also see git history) — the section no
- * longer pins under the header at all; it's back in normal document
- * flow at its Figma height (1440x877 on desktop), confirmed not to leave
- * any gap or shift anything below it. The Hero's own pin (a separate,
- * unrelated component) is untouched.
+ * pinned version of this section (also see git history) — the section
+ * itself is NOT pinned/sticky; it's back in normal document flow at its
+ * Figma height (1440x877 on desktop), confirmed not to leave any gap or
+ * shift anything below it.
+ *
+ * ---- Overlap with the Hero (curtain reveal) ----
+ * `margin-top: -OVERLAP_VHvh` (plus `position: relative` and a positive
+ * `z-index`) pulls this section's box up by the same amount
+ * HomeHeroParallax's own wrapper was made taller by (OVERLAP_VH, from the
+ * shared `overlap-config.ts` — kept in one place so the two values can
+ * never drift apart) — the two cancel exactly, so this section's
+ * EFFECTIVE on-screen position ends up identical to where it always sat
+ * before the Hero's hold existed. That's deliberate, not a missed
+ * opportunity: it's what makes this section slide up and visibly cover
+ * the Hero's still-sticky final frame (instead of just appearing
+ * abruptly once the Hero's sticky hold releases, which is what pure
+ * extension-with-no-pull-up produces — the two need to move together,
+ * one scroll pixel at a time, for the curtain edge itself to be visible
+ * sliding at all), while keeping every one of this section's OWN
+ * animation thresholds below completely unaffected (they're computed
+ * from this section's live, actual `getBoundingClientRect()` every time,
+ * and that position is — again, by construction — unchanged from before
+ * the overlap feature existed, so nothing below needed retuning; verified
+ * directly, not just reasoned about — see the PR this landed in). No
+ * transform is used for this (a transform would be the more "obviously
+ * correct" tool for a pure visual slide, but it would also distort every
+ * `getBoundingClientRect()` read this section's own measure() takes of
+ * ITSELF while a curtain transform was still resolving — margin avoids
+ * that whole class of timing bug by never touching this section's real,
+ * stable layout position at all).
  *
  * ---- Progress values ----
  * Two independent scroll-linked values drive everything, each mapped
@@ -516,6 +542,9 @@ export function HomeCompany() {
         width: isDesktop ? SECTION_W : "100%",
         height: isDesktop ? SECTION_H : "auto",
         justifyContent: isDesktop ? "flex-end" : undefined,
+        // Curtain-over-the-hero overlap — see the doc comment above.
+        marginTop: `-${OVERLAP_VH}vh`,
+        zIndex: 1,
         backgroundColor: "var(--fig-color-neutral-0)",
         paddingLeft: "var(--fig-spacing-40)",
         paddingRight: "var(--fig-spacing-40)",

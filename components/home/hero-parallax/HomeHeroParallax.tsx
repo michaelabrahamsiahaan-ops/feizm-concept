@@ -8,11 +8,40 @@ import { ChevronRightIcon, SCENE_ICONS } from "./scene-icons";
 import { H, W } from "./map-data";
 import type { SceneRender } from "./scenes";
 import { getLenis } from "@/components/shared/smooth-scroll";
+import { OVERLAP_VH } from "@/components/home/overlap-config";
 
 const STAGE_W = W;
 const STAGE_H = H;
 const INTRO_MS = 1200;
 const CARD_LIFT_PX = 48; // the prototype's actual value — see doc comment below
+
+// The 5-scene story's own scrub distance, expressed the same way the
+// wrapper's CSS height always has been — NOT the wrapper's full height
+// once the overlap below is added on top of it (see OVERLAP_VH's own
+// comment, and this component's doc comment, for the full mechanism).
+const STORY_VH = 1100;
+// Reduced motion has no story to scrub (one static frame only) — this is
+// just "one viewport's worth of normal, pre-sticky presence" before the
+// overlap hold engages, the smallest value that still gives the curtain
+// something to slide over (see the doc comment below for why zero scrub
+// distance here is correct, not a bug).
+const REDUCED_STORY_VH = 100;
+
+// ---- Optional depth effects on the hero as Company's curtain covers it ----
+// Both OFF under prefers-reduced-motion (see the component doc comment).
+// Flip this to compare with/without — see conversation for the request to
+// show both before picking one.
+const ENABLE_DEPTH_EFFECTS = true;
+const DEPTH_DARKEN_MAX_OPACITY = 0.3;
+const DEPTH_SCALE_MIN = 0.96;
+
+// `vh` CSS units and `window.innerHeight` can differ slightly (mobile
+// toolbar collapse, scrollbar gutters) — same caveat the pin's own `svh`
+// height already navigates elsewhere in this component. Desktop (this
+// feature's primary, fully-specified target) has no such discrepancy.
+function overlapPxNow() {
+  return (window.innerHeight * OVERLAP_VH) / 100;
+}
 
 /**
  * Pinned, scroll-driven parallax Home hero. Combines two sources, per the
@@ -79,6 +108,7 @@ export function HomeHeroParallax() {
   const sceneUiRefs = useRef<(HTMLDivElement | null)[]>([]);
   const cardRefs = useRef<HTMLDivElement[][]>([[], [], [], [], []]);
   const alertRef = useRef<HTMLDivElement | null>(null);
+  const darkenRef = useRef<HTMLDivElement | null>(null);
   const bgImageRef = useRef<HTMLImageElement | null>(null);
   const bgLoadedRef = useRef(false);
   // In reduced-motion mode the hero draws exactly once (no rAF loop) — if
@@ -239,6 +269,11 @@ export function HomeHeroParallax() {
     }
 
     // ---- Reduced motion: one static frame, no rAF loop at all ----
+    // Still sticky (see the pin's own style below, now unconditional) for
+    // the overlap hold — "keep the overlap, it's direct scroll, not
+    // autonomous animation" per the brief — just with zero scrub distance
+    // before it (REDUCED_STORY_VH) and no darken/scale (ENABLE_DEPTH_
+    // EFFECTS is only ever consulted in the non-reduced tick() below).
     if (reducedMotion) {
       layout();
       const endAt = { i: 0, t: SCENES[0].t1 };
@@ -266,11 +301,30 @@ export function HomeHeroParallax() {
     let last = 0;
     let gCur = 0;
     let lastSceneIndex = -1;
+    let rafRunning = false;
 
+    // Both the story's own scrub span AND the overlap's hold span are
+    // read from the SAME wrapper rect — the wrapper's CSS height is
+    // STORY_VH + OVERLAP_VH (see the JSX below), so the story's span has
+    // to subtract the overlap portion back out first to recover exactly
+    // what it was before the overlap existed (unchanged scene timing —
+    // see the doc comment above for why that's a hard requirement).
     function scrollState() {
       const rect = scrolly!.getBoundingClientRect();
-      const span = rect.height - pin!.clientHeight;
-      return { p: span > 0 ? clamp(-rect.top / span, 0, 1) : 0 };
+      const overlapPx = overlapPxNow();
+      const storySpan = rect.height - overlapPx - pin!.clientHeight;
+      const p = storySpan > 0 ? clamp(-rect.top / storySpan, 0, 1) : 0;
+      const overlapP = overlapPx > 0 ? clamp((-rect.top - storySpan) / overlapPx, 0, 1) : 1;
+      return { p, overlapP };
+    }
+
+    function applyDepthEffects(overlapP: number) {
+      if (!ENABLE_DEPTH_EFFECTS) return;
+      const pinEl = pin!;
+      const darken = darkenRef.current;
+      const scale = 1 - overlapP * (1 - DEPTH_SCALE_MIN);
+      pinEl.style.transform = overlapP > 0 ? `scale(${scale})` : "";
+      if (darken) darken.style.opacity = `${overlapP * DEPTH_DARKEN_MAX_OPACITY}`;
     }
 
     function tick(now: number) {
@@ -296,17 +350,43 @@ export function HomeHeroParallax() {
       const at = introT < INTRO_MS / 1000 && gCur < 0.001 ? { i: 0, t: introT } : locate(gCur);
       draw(at.i, at.t, now);
       applyOverlays(gCur, at);
+      applyDepthEffects(st.overlapP);
       if (at.i !== lastSceneIndex) {
         lastSceneIndex = at.i;
         setActiveScene(at.i);
       }
+
+      // Performance: once Company's curtain has fully covered the hero
+      // (overlapP reaches 1), the canvas is no longer visible at all —
+      // stop scheduling frames entirely rather than keep drawing hidden
+      // pixels. `onScrollWake` below is what notices scrolling back up
+      // past that point and restarts the loop; a plain scroll listener
+      // works here (not another rAF) because waking the loop up is a
+      // one-shot event, not something that itself needs smoothing.
+      if (st.overlapP >= 1) {
+        rafRunning = false;
+        return;
+      }
       raf = requestAnimationFrame(tick);
     }
 
-    raf = requestAnimationFrame(tick);
+    function startLoop() {
+      if (rafRunning) return;
+      rafRunning = true;
+      raf = requestAnimationFrame(tick);
+    }
+
+    function onScrollWake() {
+      if (rafRunning) return;
+      if (scrollState().overlapP < 1) startLoop();
+    }
+
+    startLoop();
+    window.addEventListener("scroll", onScrollWake, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", layout);
+      window.removeEventListener("scroll", onScrollWake);
     };
   }, [inView, reducedMotion]);
 
@@ -319,7 +399,9 @@ export function HomeHeroParallax() {
     }
     const rect = scrolly.getBoundingClientRect();
     const wrapperTopAbs = rect.top + window.scrollY;
-    const span = rect.height - pin.clientHeight;
+    // Story-only span — see scrollState()'s own comment above for why
+    // the overlap portion has to be subtracted back out first.
+    const span = rect.height - overlapPxNow() - pin.clientHeight;
     // +0.05 (not exactly SCENES[i].off): landing precisely ON a scene
     // boundary is fragile — sub-pixel scrollTo rounding can tip the
     // resulting scroll-derived `g` back under the boundary, re-selecting
@@ -338,38 +420,47 @@ export function HomeHeroParallax() {
     else window.scrollTo({ top: targetY, behavior: "smooth" });
   }
 
+  // STORY_VH (non-reduced) or REDUCED_STORY_VH (reduced) + OVERLAP_VH —
+  // the pin stays sticky for the whole thing; see the doc comment above
+  // and scrollState()'s own comment for how the two portions are told
+  // apart again at read time.
+  const wrapperVh = (reducedMotion ? REDUCED_STORY_VH : STORY_VH) + OVERLAP_VH;
+
   return (
-    <section className="relative w-full" style={{ height: reducedMotion ? "auto" : "1100vh" }} aria-label="Feizm hero">
-      <div
-        ref={scrollyRef}
-        className="relative w-full"
-        style={{ height: reducedMotion ? "auto" : "1100vh" }}
-      >
+    <section className="relative w-full" style={{ height: `${wrapperVh}vh` }} aria-label="Feizm hero">
+      <div ref={scrollyRef} className="relative w-full" style={{ height: `${wrapperVh}vh` }}>
         <div
           ref={pinRef}
           className="w-full overflow-hidden"
           style={{
-            ...(reducedMotion
-              ? { position: "relative", width: "100%", aspectRatio: `${STAGE_W} / ${STAGE_H}` }
-              : // Ported from the prototype's own `.pin` exactly: `100svh`
-                // (small viewport height), not `100vh`. `vh` resolves
-                // against the browser's LARGEST possible viewport — on a
-                // real browser with a collapsible toolbar, that's taller
-                // than what's actually visible until the toolbar hides,
-                // so a sticky `height:100vh` element can end slightly
-                // ABOVE the true bottom of the visible viewport, exposing
-                // the page's own (white) background in a strip below it.
-                // `svh` always matches the viewport as currently shown,
-                // which is what a `position: sticky` element needs here.
-                // `env(safe-area-inset-top)` is the same unmodified
-                // prototype value (0 on a device with no notch/inset; a
-                // non-zero value only on devices that have one).
-                {
-                  position: "sticky",
-                  top: "env(safe-area-inset-top, 0px)",
-                  width: "100%",
-                  height: "calc(100svh - env(safe-area-inset-top, 0px))",
-                }),
+            // Ported from the prototype's own `.pin` exactly: `100svh`
+            // (small viewport height), not `100vh`. `vh` resolves
+            // against the browser's LARGEST possible viewport — on a
+            // real browser with a collapsible toolbar, that's taller
+            // than what's actually visible until the toolbar hides,
+            // so a sticky `height:100vh` element can end slightly
+            // ABOVE the true bottom of the visible viewport, exposing
+            // the page's own (white) background in a strip below it.
+            // `svh` always matches the viewport as currently shown,
+            // which is what a `position: sticky` element needs here.
+            // `env(safe-area-inset-top)` is the same unmodified
+            // prototype value (0 on a device with no notch/inset; a
+            // non-zero value only on devices that have one).
+            //
+            // Unconditional now (used to be `position:relative` +
+            // `aspectRatio` under reduced motion, to avoid a tall
+            // scroll-jacking area with nothing to scrub) — reduced
+            // motion keeps the curtain overlap per the brief ("direct
+            // scroll, not autonomous animation"), which itself needs a
+            // sticky hold, so there's no more reduced-motion-specific
+            // sizing to preserve; both branches render the same single
+            // final frame through this same cover-fit sticky box, just
+            // with zero scrub distance before the hold in the reduced
+            // case (REDUCED_STORY_VH).
+            position: "sticky",
+            top: "env(safe-area-inset-top, 0px)",
+            width: "100%",
+            height: "calc(100svh - env(safe-area-inset-top, 0px))",
             backgroundColor: "#0E0E11",
           }}
         >
@@ -612,6 +703,14 @@ export function HomeHeroParallax() {
                 </div>
               </div>
             </div>
+
+          {/* Optional depth effect: darkens as Company's curtain covers
+              the hero — see ENABLE_DEPTH_EFFECTS/applyDepthEffects above.
+              Topmost child so it darkens the UI text too, not just the
+              canvas. Starts at opacity 0 (no-op) whenever depth effects
+              are off or under reduced motion — applyDepthEffects is
+              simply never called in either of those cases. */}
+          <div ref={darkenRef} aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ backgroundColor: "#000000", opacity: 0 }} />
         </div>
       </div>
     </section>
