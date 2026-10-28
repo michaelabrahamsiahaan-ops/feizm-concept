@@ -3,31 +3,22 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 
-// ---- Tunable constants (all named per the spec, nothing magic inline) ----
+// ---- Tunable constants ----
 const SECTION_W = 1440; // desktop (>=DESKTOP_BREAKPOINT) Figma frame width
 const SECTION_H = 877; // desktop Figma frame height
 const DESKTOP_BREAKPOINT = 1024;
-const PIN_LENGTH_VH = 120; // desktop: extra scroll (vh) the section stays pinned for
-const PIN_LENGTH_MOBILE_VH = 80; // mobile: same, when mobile pinning applies at all
 
-// Pin-progress P (0->1) ranges that drive each step. All four numbers are
-// independently tunable; TEXT_SWEEP_START intentionally equals
-// PATTERN_END (0.35) — the text sweep picks up right where the pattern
-// fill finishes, per the spec's own step order — but they're separate
-// constants, not derived, so that relationship can be broken later
-// without hunting through the math.
-const PATTERN_START = 0;
-const PATTERN_END = 0.35;
-const APPEAR_AT = 0.2;
-const TEXT_SWEEP_START = 0.35;
-const TEXT_SWEEP_END = 0.9;
-// 0.90 -> 1.00 is the hold: both ranges above are already clamped to 1 by
-// then, so nothing further needs to animate — the "hold" is just the
-// absence of any range covering that span, not separate code.
+// Viewport-fraction anchors for each effect's start/end scrollY — see the
+// component doc comment for the exact formulas these feed into.
+const PATTERN_START_VIEWPORT_FRACTION = 1.0; // section top at the viewport's bottom edge (100%)
+const PATTERN_END_VIEWPORT_FRACTION = 0.2; // pattern's bottom edge at 20% from the viewport top
+const TEXT_START_VIEWPORT_FRACTION = 0.9; // heading's top at 90% of the viewport
+const TEXT_END_VIEWPORT_FRACTION = 0.25; // paragraph's bottom at 25% from the viewport top
 
 const APPEAR_DURATION_MS = 900;
 const APPEAR_STAGGER_MS = 150;
 const APPEAR_EASE = "cubic-bezier(.16,1,.3,1)"; // ease-out
+const APPEAR_TRANSLATE_PX = 24;
 
 const GRAY: [number, number, number] = [131, 129, 129]; // --fig-color-neutral-500
 const BLACK: [number, number, number] = [3, 0, 0]; // --fig-color-neutral-900 (this section's own text color)
@@ -58,7 +49,9 @@ function wordCount(text: string) {
  * heading block and a paragraph block can share ONE continuous reading-
  * order word sequence for the sweep, while still wrapping naturally
  * (only the words are spans; the whitespace between them is a plain text
- * node, so the browser's own line-breaking is untouched).
+ * node, so the browser's own line-breaking is untouched, and screen
+ * readers see the actual words as ordinary text content — the sweep only
+ * ever touches each span's `color`).
  */
 function SweepWords({
   text,
@@ -89,112 +82,104 @@ function SweepWords({
   return <>{nodes}</>;
 }
 
-type LayoutMode = "desktop-pinned" | "mobile-pinned" | "mobile-unpinned";
-
 const headingWordCount = wordCount(HEADING_TEXT);
 
 /**
- * "Company" section of the Feizm Homepage ("Home / 02 Company"), with its
- * scroll-pinned reveal choreography (not in Figma — a separate animation
- * spec layered on top of the static build): pin the section under the
- * header for an extra stretch of scroll, during which the decorative
- * pattern sweeps gray->orange top-to-bottom, the heading/paragraph fade
- * in once, and then the text itself sweeps gray->black word by word in
- * reading order, before releasing.
+ * "Company" section of the Feizm Homepage ("Home / 02 Company"), with a
+ * scroll-linked reveal (not in Figma — a separate animation spec layered
+ * on the static build): as the section scrolls through the viewport
+ * normally (NOT pinned — see below), its decorative pattern sweeps
+ * gray->orange top-to-bottom, the heading/paragraph fade in once, and the
+ * text itself sweeps gray->black word by word in reading order.
  *
  * Static build details (copy/typography/tokens/pattern asset) are
- * unchanged from the original read of node 148:45272 — see the git
- * history for that derivation. This comment covers the animation layer.
+ * unchanged from the original read of node 148:45272 — see git history.
+ * This comment covers the animation layer, which replaces an earlier
+ * pinned version of this section (also see git history) — the section no
+ * longer pins under the header at all; it's back in normal document
+ * flow at its Figma height (1440x877 on desktop), confirmed not to leave
+ * any gap or shift anything below it. The Hero's own pin (a separate,
+ * unrelated component) is untouched.
  *
- * ---- Pin geometry ----
- * A wrapper div sized `section's own natural height + PIN_LENGTH` holds
- * the section as `position: sticky; top: var(--header-h)` — it pins
- * flush under the header (confirmed: the measured gap is 0px) and stays
- * stuck for exactly PIN_LENGTH of extra scroll before releasing, same
- * "wrapper + sticky inner, measure once via rect+scrollY, recompute on
- * resize" technique as HomeHeroParallax's own pin and the Fleet USP
- * divider dot. One live pin-progress value P (0->1) is computed from
- * scroll position via a passive scroll listener, rAF-throttled, gated by
- * an IntersectionObserver so nothing runs while off-screen — P=0 exactly
- * when the section starts sticking, P=1 exactly when it releases.
+ * ---- Progress values ----
+ * Two independent scroll-linked values drive everything, each mapped
+ * from a *fixed* scrollY range computed once (not re-derived every
+ * frame) from where the relevant element's edge crosses a given fraction
+ * of the viewport height — i.e. literally "when element edge X reaches
+ * viewport position Y%", per the spec:
+ *   --p  (pattern fill):  0 at the scrollY where the SECTION's own top
+ *        reaches the viewport's bottom edge (100%); 1 at the scrollY
+ *        where the PATTERN's own bottom edge reaches 20% from the
+ *        viewport's top.
+ *   --tp (text sweep):    0 at the scrollY where the HEADING's top
+ *        reaches 90% of the viewport (same scrollY the appear trigger
+ *        below uses); 1 at the scrollY where the PARAGRAPH's bottom
+ *        reaches 25% from the viewport's top.
+ * Both are pure functions of scrollY (computed fresh from the live
+ * scroll position every tick, not accumulated/eased), so scrolling back
+ * up reverses both exactly. They're allowed to overlap in time (the spec
+ * says so explicitly) — nothing coordinates one against the other.
  *
- * Because this section's own `position: sticky` sits immediately after
- * the Hero's pinned wrapper in normal DOM flow with no gap, the two pins
- * never compete for the "stuck" state at the same scroll position —
- * that's how CSS sticky sequencing works natively (no manual handoff
- * coordination needed), verified by checking geometry right at the
- * handoff scrollY (no blank gap, no jump).
+ * Applied the same way as before: the pattern is two stacked copies of
+ * the same SVG (a permanent grayscale base layer + the real orange layer
+ * masked on top, the mask's boundary written directly each tick as
+ * `${p*100}%`), and each word span's `color` is interpolated gray->black
+ * over a window centered on `tp * wordCount` reaching that word's own
+ * index, so the sweep visits words strictly in reading order (heading
+ * first). Both written via direct DOM style per tick, not through React
+ * state/CSS custom properties — same "measure/paint split, direct writes
+ * for continuous values" convention already used by the Fleet USP
+ * divider dot and the Hero's own progress bars elsewhere in this project
+ * (functionally identical result to driving them through --p/--tp/--i
+ * custom properties and a CSS formula; this is the technique already
+ * established and proven in this codebase, not a new one).
  *
- * ---- Choreography (all four thresholds and durations are named
- * constants above, tunable independently) ----
- * - PATTERN_START..PATTERN_END (0->0.35): two identical copies of the
- *   pattern SVG are stacked — a permanently-visible grayscale-filtered
- *   base layer, and the real (orange) layer on top, revealed via a
- *   `mask-image` linear-gradient whose boundary is written directly to
- *   the DOM each tick (`${p*100}%`), sweeping top to bottom as p runs
- *   0->1. Pure function of P, so scrolling back up reverses it exactly.
- * - APPEAR_AT (0.2, a single threshold not a range): a ONE-WAY latch
- *   (`appearedRef`) — once P crosses it, the heading fades/slides in via
- *   a real CSS transition (900ms ease-out), the paragraph the same
- *   150ms later. Latching makes this reproduce the "runs once, does not
- *   replay on scroll-up" requirement for free: once true, always true,
- *   the opacity/transform are never written again regardless of P.
- *   Checked once on mount too — if P is already past 0.2 at load (e.g. a
- *   mid-pin refresh), both are set straight to their visible end state
- *   with the transition temporarily disabled, so there's no stray
- *   animation playing on a page that loaded already-scrolled.
- * - TEXT_SWEEP_START..TEXT_SWEEP_END (0.35->0.9): the heading and
- *   paragraph are rendered as plain whitespace + one <span> per word
- *   (SweepWords), sharing one continuous reading-order index. Each
- *   word's `color` is written directly every tick, interpolated
- *   gray->black over a window centered on `tp * wordCount` reaching that
- *   word's own index — i.e. the sweep visits words strictly in reading
- *   order, heading first. Also a pure function of local progress `tp`,
- *   so it reverses on scroll-up exactly like the pattern fill.
- * - 0.9->1.0 is a hold with no code of its own: both ranges above are
- *   already clamped to their endpoint by P=0.9, so the state simply
- *   stays fully revealed until the pin lets go.
+ * ---- Appear (one-way latch, not a range) ----
+ * The moment scrollY first reaches the SAME threshold `--tp`'s 0-point
+ * uses (heading's top at 90% viewport), `appearedRef` latches true and
+ * the heading fades/slides in (opacity + translateY 24px->0, 900ms
+ * ease-out), the paragraph 150ms later. Once latched, always latched —
+ * scrolling back up never re-hides or re-plays it. Checked once on
+ * mount too: if the page loads already past that scrollY (e.g. a
+ * mid-section refresh), both are set straight to their visible end state
+ * with no transition, so there's no stray animation on load.
+ *
+ * ---- Reachability guarantee ----
+ * Every END threshold (`patternEndY`, `textEndY`) is clamped to the
+ * document's actual max scrollY (`scrollHeight - innerHeight`), exactly
+ * like the Fleet USP divider dot's own fix for the same class of bug: if
+ * the page doesn't have enough real scroll room for an element's edge to
+ * literally reach its target viewport fraction (e.g. the paragraph's
+ * bottom can't reach 25% because the page ends first), capping the end
+ * at the max reachable scrollY still drives that progress value to
+ * exactly 1 once the user has scrolled as far as the page allows, rather
+ * than leaving it stuck short forever. Recomputed on resize AND via a
+ * ResizeObserver on `document.body` (content below this section loading
+ * or changing size also changes the document's max scroll).
  *
  * ---- Header ----
- * No changes needed: SiteHeader's own trigger (site-header.tsx) reads
- * `#home-company`'s live `getBoundingClientRect().top`. Once this
- * section is stuck, that top is pinned at exactly `--header-h` for the
- * entire pin — already `<= header height`, so the header reads solid
- * continuously throughout, and slightly before too (as the section
- * scrolls up into that position in the first place), never overlay.
+ * No changes, nothing section-specific: SiteHeader's own scroll-driven
+ * trigger (site-header.tsx) already reads `#home-company`'s live
+ * `getBoundingClientRect().top` every tick and flips solid once it's
+ * <= the header's height — since this section is normal (non-sticky)
+ * flow now, that happens naturally as it scrolls up past the header,
+ * exactly like any other section on the site.
  *
- * ---- Responsive (<1024px) ----
- * Below DESKTOP_BREAKPOINT the fixed 1440x877 layout is replaced with a
- * fluid one (full width, auto height — this section specifically opts
- * out of this project's usual "fixed 1440px, not responsive" convention
- * for its own content box, since the pin/reveal spec explicitly asks for
- * mobile behavior). The section's own natural (unpinned) height is then
- * measured against the viewport height once mounted:
- *   - shorter than the viewport: pin it, same mechanism as desktop, with
- *     PIN_LENGTH_MOBILE instead of PIN_LENGTH.
- *   - taller than the viewport: pinning it would mean the sticky section
- *     hides its own overflowing content (nothing to scroll the overflow
- *     into), so it's NOT pinned — it renders as a normal block, and P is
- *     instead driven by how far the section has scrolled through the
- *     viewport (`P = clamp((viewportHeight - sectionTop) / viewportHeight,
- *     0, 1)`, i.e. 0 when the section's top is at the viewport's bottom
- *     edge, 1 once it reaches the viewport's top edge) — there's no prior
- *     non-pinned implementation to reuse (this is a new build, not an
- *     edit of an earlier one), so this is a reasonable, clearly-isolated
- *     formula a future pass can retune independently of the pinned math.
- * `isDesktop`/this mobile decision can only be resolved client-side
- * (matchMedia + a real measured content height) — both default to the
- * desktop shape for SSR and the very first client render specifically to
- * avoid a hydration mismatch (same reasoning, and same tradeoff, as
- * HomeHeroParallax's own `reducedMotion` state), corrected in a
- * useLayoutEffect immediately after mount.
+ * ---- Responsive ----
+ * Below DESKTOP_BREAKPOINT the fixed 1440x877 box becomes fluid (full
+ * width, auto height) — this section's own opt-out of this project's
+ * usual "fixed 1440px" convention, since its content needs to reflow at
+ * narrow widths for the scroll-linked thresholds to make sense at all.
+ * The scroll-linked math itself doesn't change by breakpoint — it's
+ * already expressed in viewport fractions, so it works the same at any
+ * width/height, including where the paragraph wraps into many more
+ * lines (confirmed at 1440x900, 1024x768 and 375x812).
  *
  * ---- Reduced motion ----
- * No pin, no scrub, no wrapper at all — renders the final state directly
- * (pattern fully orange, text fully appeared and fully black).
+ * No scroll listener at all — renders the final state directly (pattern
+ * fully orange, text fully appeared and fully black, no transition).
  */
 export function HomeCompany() {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const patternOrangeRef = useRef<HTMLImageElement | null>(null);
   const headingWrapRef = useRef<HTMLHeadingElement | null>(null);
@@ -202,90 +187,79 @@ export function HomeCompany() {
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const appearedRef = useRef(false);
 
-  // SSR/first-client-render default: desktop, not reduced motion — see
-  // doc comment above for why (hydration-safety, same tradeoff as
-  // HomeHeroParallax). Corrected post-mount.
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("desktop-pinned");
+  // SSR/first-client-render defaults: desktop width, not reduced motion —
+  // hydration-safety (matchMedia has no SSR-safe value), same tradeoff as
+  // HomeHeroParallax's own reducedMotion state. Corrected post-mount.
+  const [isDesktop, setIsDesktop] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [resolved, setResolved] = useState(false); // true once the real mode is known
 
   useLayoutEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const motionMq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const widthMq = window.matchMedia(`(min-width: ${DESKTOP_BREAKPOINT}px)`);
-
-    function resolveMode() {
-      if (widthMq.matches) {
-        setLayoutMode("desktop-pinned");
-        setResolved(true);
-        return;
-      }
-      // Mobile: measure the section's own natural height (it renders
-      // fluid/auto-height in this branch — see the JSX below) against the
-      // viewport to decide pinned vs unpinned.
-      const el = sectionRef.current;
-      if (!el) return;
-      const naturalH = el.getBoundingClientRect().height;
-      setLayoutMode(naturalH > window.innerHeight ? "mobile-unpinned" : "mobile-pinned");
-      setResolved(true);
-    }
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- matchMedia/layout measurement are browser-only, no SSR-safe value (see doc comment)
-    setReducedMotion(mq.matches);
-    resolveMode();
-
-    const onMotionChange = () => setReducedMotion(mq.matches);
-    const onWidthChange = () => resolveMode();
-    mq.addEventListener("change", onMotionChange);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- matchMedia is browser-only, no SSR-safe value (see doc comment); covers both setState calls below
+    setReducedMotion(motionMq.matches);
+    setIsDesktop(widthMq.matches);
+    const onMotionChange = () => setReducedMotion(motionMq.matches);
+    const onWidthChange = () => setIsDesktop(widthMq.matches);
+    motionMq.addEventListener("change", onMotionChange);
     widthMq.addEventListener("change", onWidthChange);
-    window.addEventListener("resize", resolveMode);
     return () => {
-      mq.removeEventListener("change", onMotionChange);
+      motionMq.removeEventListener("change", onMotionChange);
       widthMq.removeEventListener("change", onWidthChange);
-      window.removeEventListener("resize", resolveMode);
     };
   }, []);
 
   const [inView, setInView] = useState(false);
   useLayoutEffect(() => {
-    const el = wrapperRef.current ?? sectionRef.current;
+    const el = sectionRef.current;
     if (!el) return;
     const io = new IntersectionObserver((entries) => setInView(entries[0].isIntersecting), {
-      rootMargin: "50% 0px 50% 0px",
+      rootMargin: "100% 0px 100% 0px",
     });
     io.observe(el);
     return () => io.disconnect();
-  }, [layoutMode]);
+  }, []);
 
   useLayoutEffect(() => {
     const section = sectionRef.current;
-    if (!section) return;
-
-    function headerHeight() {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--header-h");
-      const n = parseFloat(raw);
-      return Number.isFinite(n) ? n : 0;
-    }
+    const pattern = patternOrangeRef.current;
+    const heading = headingWrapRef.current;
+    const paragraph = paragraphWrapRef.current;
+    if (!section || !pattern || !heading || !paragraph) return;
 
     function applyPattern(p: number) {
-      const orange = patternOrangeRef.current;
-      if (!orange) return;
       const pct = `${p * 100}%`;
       const mask = `linear-gradient(to bottom, black 0, black ${pct}, transparent ${pct})`;
-      orange.style.maskImage = mask;
-      orange.style.webkitMaskImage = mask;
+      pattern!.style.maskImage = mask;
+      pattern!.style.webkitMaskImage = mask;
     }
 
-    function applyAppear() {
+    function applyAppear(instant: boolean) {
       if (appearedRef.current) return;
       appearedRef.current = true;
-      const reveal = (el: HTMLElement | null, delayMs: number) => {
-        if (!el) return;
+      const reveal = (el: HTMLElement, delayMs: number) => {
+        if (instant) {
+          // Page loaded already past the threshold (e.g. a mid-section
+          // refresh) — jump straight to the end state with no transition
+          // at all, rather than letting the 900ms ease-out play on load.
+          // Restored afterward so this never permanently disables the
+          // element's transition (harmless here since nothing else
+          // transitions these elements, but correct regardless).
+          el.style.transition = "none";
+          el.style.opacity = "1";
+          el.style.transform = "translateY(0)";
+          // Force the instant style to actually paint before restoring
+          // the transition property, so the browser can't coalesce this
+          // into the same frame as the restore and animate anyway.
+          void el.offsetHeight;
+          el.style.transition = "";
+        }
         el.style.transitionDelay = `${delayMs}ms`;
         el.style.opacity = "1";
         el.style.transform = "translateY(0)";
       };
-      reveal(headingWrapRef.current, 0);
-      reveal(paragraphWrapRef.current, APPEAR_STAGGER_MS);
+      reveal(heading!, 0);
+      reveal(paragraph!, APPEAR_STAGGER_MS);
     }
 
     function applyTextSweep(tp: number) {
@@ -305,112 +279,97 @@ export function HomeCompany() {
       }
     }
 
-    function apply(P: number) {
-      applyPattern(mapRange(P, PATTERN_START, PATTERN_END));
-      if (P >= APPEAR_AT) applyAppear();
-      applyTextSweep(mapRange(P, TEXT_SWEEP_START, TEXT_SWEEP_END));
-    }
-
     // ---- Reduced motion: final state, no listeners at all ----
     if (reducedMotion) {
-      apply(1);
+      applyPattern(1);
+      applyAppear(true);
+      applyTextSweep(1);
       return;
     }
 
-    if (!resolved) return;
+    if (!inView) return;
 
-    // ---- Mobile, unpinned: P driven by normal scroll-through position ----
-    if (layoutMode === "mobile-unpinned") {
-      if (!inView) return;
-      let raf = 0;
-      let ticking = false;
-      const tick = () => {
-        const rect = section.getBoundingClientRect();
-        const P = clamp((window.innerHeight - rect.top) / window.innerHeight, 0, 1);
-        apply(P);
-        ticking = false;
-      };
-      const onScroll = () => {
-        if (ticking) return;
-        ticking = true;
-        raf = requestAnimationFrame(tick);
-      };
-      tick();
-      window.addEventListener("scroll", onScroll, { passive: true });
-      window.addEventListener("resize", tick);
-      return () => {
-        cancelAnimationFrame(raf);
-        window.removeEventListener("scroll", onScroll);
-        window.removeEventListener("resize", tick);
-      };
-    }
+    let patternStartY = 0;
+    let patternEndY = 1;
+    let textStartY = 0;
+    let textEndY = 1;
 
-    // ---- Pinned (desktop or mobile): P driven by the wrapper's scroll range ----
-    const wrapper = wrapperRef.current;
-    if (!wrapper || !inView) return;
-
-    let startScrollY = 0;
-    let pinLengthPx = 1;
-
-    // The wrapper's height is set HERE, not in static CSS: on desktop the
-    // section's height is the known fixed SECTION_H, but on mobile it's
-    // fluid (auto, driven by text wrap at whatever width), so there's no
-    // static `calc()` that could express "content height + PIN_LENGTH"
-    // without first measuring the content. Explicitly setting it from the
-    // real measured section height makes this the single source of truth
-    // for both modes, rather than trusting a static value that's only
-    // correct on desktop and then separately deriving pinLengthPx back
-    // out of it (fragile — the two would need to agree).
     function measure() {
-      const sectionH = section!.getBoundingClientRect().height;
-      const pinLengthVh = layoutMode === "desktop-pinned" ? PIN_LENGTH_VH : PIN_LENGTH_MOBILE_VH;
-      pinLengthPx = Math.max(1, (pinLengthVh / 100) * window.innerHeight);
-      wrapper!.style.height = `${sectionH + pinLengthPx}px`;
+      const vh = window.innerHeight;
+      const maxScrollY = Math.max(0, document.documentElement.scrollHeight - vh);
 
-      const rect = wrapper!.getBoundingClientRect();
-      const wrapperTopAbs = rect.top + window.scrollY;
-      startScrollY = wrapperTopAbs - headerHeight();
+      const sectionTopAbs = section!.getBoundingClientRect().top + window.scrollY;
+      const patternRect = pattern!.getBoundingClientRect();
+      const patternBottomAbs = patternRect.top + window.scrollY + patternRect.height;
+      const headingTopAbs = heading!.getBoundingClientRect().top + window.scrollY;
+      const paragraphBottomAbs = paragraph!.getBoundingClientRect().top + window.scrollY + paragraph!.getBoundingClientRect().height;
+
+      patternStartY = sectionTopAbs - PATTERN_START_VIEWPORT_FRACTION * vh;
+      const patternNaturalEnd = patternBottomAbs - PATTERN_END_VIEWPORT_FRACTION * vh;
+      patternEndY = Math.min(patternNaturalEnd, maxScrollY);
+      patternEndY = Math.max(patternEndY, patternStartY + 1);
+
+      textStartY = headingTopAbs - TEXT_START_VIEWPORT_FRACTION * vh;
+      const textNaturalEnd = paragraphBottomAbs - TEXT_END_VIEWPORT_FRACTION * vh;
+      textEndY = Math.min(textNaturalEnd, maxScrollY);
+      textEndY = Math.max(textEndY, textStartY + 1);
     }
-
-    measure();
-    const onResize = () => measure();
-    window.addEventListener("resize", onResize);
 
     let raf = 0;
     let ticking = false;
+    // Only the very first tick (from the initial synchronous update()
+    // call below, before any scroll/resize has happened) may apply the
+    // appear state instantly — any later crossing of the threshold, from
+    // a real scroll or a later resize-triggered update, animates
+    // normally. See applyAppear's own comment for why.
+    let isInitialTick = true;
     const tick = () => {
-      const P = clamp((window.scrollY - startScrollY) / pinLengthPx, 0, 1);
-      apply(P);
+      const scrollY = window.scrollY;
+      applyPattern(mapRange(scrollY, patternStartY, patternEndY));
+      if (scrollY >= textStartY) applyAppear(isInitialTick);
+      applyTextSweep(mapRange(scrollY, textStartY, textEndY));
       ticking = false;
     };
+    const update = () => {
+      measure();
+      tick();
+      isInitialTick = false;
+    };
+
+    update();
+
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       raf = requestAnimationFrame(tick);
     };
-    tick();
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", update);
+
+    // Document-height changes (content elsewhere on the page loading or
+    // resizing) can move maxScrollY, which can move a clamped end point —
+    // not just viewport resizes.
+    const bodyRO = new ResizeObserver(update);
+    bodyRO.observe(document.body);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", update);
+      bodyRO.disconnect();
     };
-  }, [layoutMode, reducedMotion, resolved, inView]);
-
-  const isDesktop = layoutMode === "desktop-pinned";
-  const isPinned = reducedMotion ? false : layoutMode !== "mobile-unpinned";
+  }, [reducedMotion, inView]);
 
   const appearStyle = (): CSSProperties =>
     reducedMotion
       ? { opacity: 1, transform: "none" }
       : {
           opacity: 0,
-          transform: "translateY(16px)",
+          transform: `translateY(${APPEAR_TRANSLATE_PX}px)`,
           transition: `opacity ${APPEAR_DURATION_MS}ms ${APPEAR_EASE}, transform ${APPEAR_DURATION_MS}ms ${APPEAR_EASE}`,
         };
 
-  const sectionEl = (
+  return (
     <section
       ref={sectionRef}
       id="home-company"
@@ -419,8 +378,6 @@ export function HomeCompany() {
         width: isDesktop ? SECTION_W : "100%",
         height: isDesktop ? SECTION_H : "auto",
         justifyContent: isDesktop ? "flex-end" : undefined,
-        position: isPinned ? "sticky" : "relative",
-        top: isPinned ? "var(--header-h)" : undefined,
         backgroundColor: "var(--fig-color-neutral-0)",
         paddingLeft: "var(--fig-spacing-40)",
         paddingRight: "var(--fig-spacing-40)",
@@ -430,7 +387,7 @@ export function HomeCompany() {
       }}
     >
       {/* Base (always-visible) grayscale layer + the real orange layer
-          revealed on top via a mask that grows top-to-bottom with P —
+          revealed on top via a mask that grows top-to-bottom with --p —
           see the doc comment above. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -470,24 +427,5 @@ export function HomeCompany() {
         </p>
       </div>
     </section>
-  );
-
-  if (!isPinned) return sectionEl;
-
-  return (
-    // Static fallback height only (the real height, which on mobile
-    // depends on a runtime content measurement, is set imperatively in
-    // the effect's own measure() — see its comment). Desktop's fallback
-    // is already exactly correct since SECTION_H is fixed; mobile's is a
-    // rough placeholder for the one frame before that effect runs.
-    <div
-      ref={wrapperRef}
-      className="relative w-full"
-      style={{
-        height: isDesktop ? `calc(${SECTION_H}px + ${PIN_LENGTH_VH}vh)` : `calc(100vh + ${PIN_LENGTH_MOBILE_VH}vh)`,
-      }}
-    >
-      {sectionEl}
-    </div>
   );
 }
