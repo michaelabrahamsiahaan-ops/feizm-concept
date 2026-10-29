@@ -136,9 +136,18 @@ function ServiceArrow({ style }: { style?: CSSProperties }) {
 
 /**
  * "Services" section of the Feizm Homepage ("Home / 04 Services", node
- * 179:160782, read live via `figma-cli`) and DESIGN.md's "About Us Tokens"
- * variable collection (same `--fig-*` custom properties as the other
- * sections, from app/tokens.css):
+ * 206:343030 — re-read fresh each time this section changes in Figma, the
+ * node id is NOT stable across revisions, confirmed directly: this was
+ * 179:160782 two reads ago) and DESIGN.md's "About Us Tokens" variable
+ * collection (same `--fig-*` custom properties as the other sections,
+ * from app/tokens.css):
+ *   - section background is `brand-50` (`#feefea`) — was `neutral-0`
+ *     (white) as of two reads ago
+ *   - the "Services" badge next to the heading (`SectionBadge`, same
+ *     component/styling as Company's and Stats') was removed in the
+ *     PREVIOUS re-read, then reinstated in this one, byte-identical to
+ *     its earlier styling (fill/stroke/radius/dot/text all unchanged) —
+ *     confirmed directly, not assumed back from habit
  *   - section padding (60/40), content gap (36) and each row's own
  *     top/bottom padding (24) and column gap (64) all map to real spacing
  *     tokens. Each row's LEFT/RIGHT padding is 0 — the row's own
@@ -148,13 +157,45 @@ function ServiceArrow({ style }: { style?: CSSProperties }) {
  *   - heading color (neutral-900), index number color (brand-500), row
  *     divider (neutral-200), title/description color (neutral-900), and
  *     the hover arrow's stroke (brand-500) are all bound variables
- *   - heading (40px), title (38px), description (20px) and the index
- *     number (16px) are literal component-scaled sizes
+ *   - heading (40px), title (32px, was 38px), description (20px) and the
+ *     index number (16px) are literal component-scaled sizes
  *
  * Layout: each row is a horizontal flex — a FIXED 549px-wide "index +
  * title" column (fixed, not hug, so every row's title starts at the same
  * x) then the description filling the remainder. Every row has its own
- * bottom-only divider.
+ * bottom-only divider; the list as a whole ALSO has its own top-only
+ * divider (confirmed on the "List" frame itself — `strokeTopWeight: 1,
+ * strokeBottomWeight: 0` — not on the heading row, which has an empty
+ * `strokes` array despite all four of its own per-side weights reading
+ * 1: weights without an actual stroke paint render nothing, a real gotcha
+ * caught by rendering and pixel-measuring the frame, not by trusting the
+ * weight properties alone), between the heading and row 01.
+ *
+ * ---- Index number / title baseline alignment ----
+ * The small index number (16px) and the much larger title (32px) must
+ * sit on the same text BASELINE (confirmed by pixel-measuring Figma's own
+ * render: the bottom of "01" and the bottom of "Fleet" — a word with no
+ * descenders — land on the exact same pixel row). An earlier version of
+ * this component tried to approximate this by bottom-aligning the two
+ * elements' own line-height BOXES (`items-end` + a hand-tuned padding-
+ * bottom on the number) — this is NOT the same thing as baseline
+ * alignment and breaks as soon as the two font sizes differ: a font's
+ * baseline sits a DIFFERENT distance above its own line-height box's
+ * bottom edge depending on font-size (roughly proportional to it, via
+ * the font's own ascent/descent metrics), so matching box-bottoms for a
+ * 16px and a 32px text of the same font still leaves their baselines
+ * offset — confirmed directly, pixel-measured at 7px (the number sitting
+ * visibly lower than the title's true baseline, the title's baseline
+ * cutting through the number's middle, matching the bug report exactly).
+ * `items-baseline` on the index+title flex row fixes this properly: it's
+ * a browser-native computation from the actual font metrics, correct
+ * regardless of how the two font-sizes/line-heights relate, and (per the
+ * flexbox spec) uses a multi-line flex item's FIRST line baseline
+ * automatically, so a title wrapping to two lines on a narrow viewport
+ * still aligns the number against the first line without extra code.
+ * The title+arrow row's own internal alignment (`items-start`, inside
+ * the `<h3>`) is unchanged — only the outer index-vs-title alignment
+ * changed, so the arrow's own position next to the title is unaffected.
  *
  * ---- Hover arrow animation ----
  * Tuned to match canalsandwindmills.com's own GSAP hover feel (reference
@@ -309,7 +350,7 @@ export function ServicesSection() {
     <section
       className="flex w-[1440px] flex-col"
       style={{
-        backgroundColor: "var(--fig-color-neutral-0)",
+        backgroundColor: "var(--fig-color-brand-50)",
         paddingTop: "var(--fig-spacing-60)",
         paddingBottom: "var(--fig-spacing-60)",
         paddingLeft: "var(--fig-spacing-40)",
@@ -332,7 +373,7 @@ export function ServicesSection() {
         <SectionBadge label="Services" />
       </div>
 
-      <div className="flex w-full flex-col">
+      <div className="flex w-full flex-col" style={{ borderTop: "1px solid var(--fig-color-neutral-200)" }}>
         {SERVICES.map((service, i) => (
           <a
             key={service.number}
@@ -352,18 +393,16 @@ export function ServicesSection() {
               borderBottom: "1px solid var(--fig-color-neutral-200)",
             }}
           >
-            <div className="flex shrink-0 items-end" style={{ width: 549, gap: "var(--fig-spacing-8)" }}>
-              <span className="shrink-0" style={{ paddingBottom: "9px" }}>
-                <span
-                  className="font-normal"
-                  style={{ color: "var(--fig-color-brand-500)", fontSize: "16px", lineHeight: "24px" }}
-                >
-                  {service.number}
-                </span>
+            <div className="flex shrink-0 items-baseline" style={{ width: 549, gap: "var(--fig-spacing-8)" }}>
+              <span
+                className="shrink-0 font-normal"
+                style={{ color: "var(--fig-color-brand-500)", fontSize: "16px", lineHeight: "22px" }}
+              >
+                {service.number}
               </span>
               <h3
                 className="flex items-start font-normal"
-                style={{ color: "var(--fig-color-neutral-900)", fontSize: "38px", lineHeight: "57px", gap: "8px" }}
+                style={{ color: "var(--fig-color-neutral-900)", fontSize: "32px", lineHeight: "48px", gap: "8px" }}
               >
                 <span>{service.title}</span>
                 <ServiceArrow style={arrowStyle(activeIndex === i, reducedMotion)} />
