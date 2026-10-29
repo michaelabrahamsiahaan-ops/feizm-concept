@@ -133,36 +133,25 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Safety net, not a ServicesSection-specific fix: that section is
+       intentionally a fixed 1440px design (matches Figma, same
+       convention as Principles.tsx on the About page), but WITHOUT this,
+       a narrow mobile viewport doesn't just horizontally-scroll past it —
+       confirmed directly, Chromium's mobile emulation at 375x812 reported
+       window.innerWidth/innerHeight as 1440x3119, i.e. the ENTIRE PAGE
+       (not just this one section) zooms out to accommodate the widest
+       overflowing element, breaking every other (already-responsive)
+       section's own layout along with it. Needed on BOTH html and body —
+       confirmed directly, html alone did not stop the zoom-out. This
+       contains the damage to "the one non-responsive section clips/needs
+       a horizontal scroll," not "the whole homepage renders unreadably
+       tiny." Making ServicesSection itself fluid at narrow widths is a
+       separate, larger change, not part of this one. */
+    overflow-x: hidden;
   }
   html {
     @apply font-sans;
+    overflow-x: hidden;
   }
 }
 
-/* Services row hover arrow (components/home/services-section.tsx) — the
-   base (hidden) scale is a JS-computed ratio (7.375/23.75, read live from
-   Figma's own small/large reference icons), not a round Tailwind scale
-   step, so it's passed in as the `--arrow-start` inline custom property
-   and read here. Tailwind's own `scale-(--arrow-start)` arbitrary-
-   variable utility (v4's shorthand for `scale-[var(--arrow-start)]`)
-   silently failed to generate any CSS for this specific value at all
-   (confirmed directly: the class reached the DOM, `--arrow-start` itself
-   resolved correctly via getComputedStyle, but `--tw-scale-x/y` stayed at
-   their default "1" and no matching stylesheet rule existed) while every
-   OTHER arbitrary-value utility on the same element compiled fine — so
-   this one rule is hand-written instead of fighting that, everything
-   else about the animation (opacity, transition timing/duration, hover/
-   focus/touch/reduced-motion scoping) still lives as Tailwind classes
-   directly on the element. */
-.service-arrow {
-  transform: scale(var(--arrow-start));
-}
-.group:hover .service-arrow,
-.group:focus-visible .service-arrow {
-  transform: scale(1);
-}
-@media (hover: none) {
-  .service-arrow {
-    transform: scale(1);
-  }
-}
