@@ -1,13 +1,14 @@
 import { HomeHeroParallax } from "@/components/home/hero-parallax/HomeHeroParallax";
 import { HomeCompany } from "@/components/HomeCompany";
 import { StatsSection } from "@/components/home/stats-section";
+import { ServicesSection } from "@/components/home/services-section";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SmoothScroll } from "@/components/shared/smooth-scroll";
 
 /**
- * "Homepage" — Hero and Company exist in Figma so far (confirmed via
- * `figma-cli find "Home /"`), so this page has just these two sections
- * until more `Home / NN ...` frames exist to build from.
+ * "Homepage" — Hero, Company, Stats and Services exist in Figma so far
+ * (confirmed via `figma-cli find "Home /"`), so this page has just these
+ * four sections until more `Home / NN ...` frames exist to build from.
  *
  * SiteHeader stays in its overlay (transparent) state for the entire
  * 1100vh pinned hero and only switches to solid once the pin releases —
@@ -29,15 +30,16 @@ import { SmoothScroll } from "@/components/shared/smooth-scroll";
  * be, but not fully independent: a sticky element still needs its OWN
  * height worth of normal document flow to release into once its hold
  * ends, and with nothing after it that only resolves if the viewport is
- * at least that tall. At 1440x900 (pin height 820px) this section falls
- * exactly 80px (900-820) short of ever reaching P=1 with nothing below
- * it — confirmed by measurement, not guessed.
+ * at least that tall. At 1440x900 (pin height 820px) this section used to
+ * fall exactly 80px (900-820) short of ever reaching P=1 with nothing
+ * below it (confirmed by measurement, not guessed) — covered back then by
+ * a TEMPORARY 100vh spacer div, now removed in favor of ServicesSection
+ * itself providing that room for real, per that spacer's own comment.
  *
- * TEMPORARY: the small trailing spacer below exists only to cover that
- * 80px gap for now, generous at 100vh so it stays correct across
- * reasonable viewport heights too. Delete it once a real next section
- * (e.g. "Home / 04 ...") exists below StatsSection and takes over
- * providing it.
+ * ServicesSection ("Home / 04 Services") is a plain static section (fixed
+ * 1440px width, same convention as Principles.tsx on the About page) — no
+ * scroll-linked animation, no pin, nothing that needs coordinating with
+ * the sections above it.
  */
 export default function HomePage() {
   return (
@@ -47,7 +49,7 @@ export default function HomePage() {
       <HomeHeroParallax />
       <HomeCompany />
       <StatsSection />
-      <div aria-hidden="true" style={{ height: "100vh" }} />
+      <ServicesSection />
     </main>
   );
 }
