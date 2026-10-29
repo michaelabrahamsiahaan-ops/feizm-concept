@@ -97,19 +97,20 @@ function arrowStyle(isActive: boolean, reducedMotion: boolean): CSSProperties {
 }
 
 /**
- * The hover-reveal arrow (exported from Figma node 189:221649 — the
- * actual arrow instance on "Home / 04 Services - Hover"'s Fleet
- * Management row). Rendered at its native 57x57 (the exported frame's
- * own size, not cropped to the inner ~23.75px glyph) so the reserved
- * layout space matches Figma's own spacing model exactly: the title's
- * own text box width + this frame's full 57px width + the row's 8px gap
- * is what Figma actually measures, not title-width + glyph-width + gap.
+ * The hover-reveal arrow (originally exported from Figma node 189:221649
+ * at its native 57x57 frame size; per explicit instruction now rendered
+ * at 48x48 instead). `viewBox` stays "0 0 57 57" — the ORIGINAL design
+ * space the path coordinates below are drawn in — while `width`/`height`
+ * shrink to 48, so the SVG uniformly scales its own content (including
+ * `stroke-width`, since stroke width is specified in the same user-
+ * coordinate space as the path data) down to fit, same proportions as
+ * before, no path coordinates to hand-edit.
  */
 function ServiceArrow({ style }: { style?: CSSProperties }) {
   return (
     <svg
-      width="57"
-      height="57"
+      width="48"
+      height="48"
       viewBox="0 0 57 57"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -236,7 +237,7 @@ function ServiceArrow({ style }: { style?: CSSProperties }) {
  * whether that position still falls inside the active row's own
  * `getBoundingClientRect()`, and clears `activeIndex` if not.
  *
- * The arrow's 57px-wide box is always rendered (never conditionally
+ * The arrow's 48px-wide box is always rendered (never conditionally
  * mounted) as a sibling of the title text inside the title's own flex
  * row (8px gap, matching Figma's own title-wrapper spacing) — so its
  * space is always reserved and the title never shifts when it animates
