@@ -6,8 +6,15 @@ import { OVERLAP_VH } from "@/components/home/overlap-config";
 
 // ---- Tunable constants ----
 const SECTION_W = 1440; // desktop (>=DESKTOP_BREAKPOINT) Figma frame width
-const SECTION_H = 877; // desktop Figma frame height
+const SECTION_H = 664.87; // desktop Figma frame height — re-read from Figma, was 877
 const DESKTOP_BREAKPOINT = 1024;
+// Text column ("Container" in Figma) as a % of its parent's content width
+// ("Frame 7", 1360 = 1440 − 2×40 padding): 699/1360. Figma itself just
+// renders Container at a flat 699px (no responsive behavior) — this %
+// is what makes the column scale fluidly with the viewport on the web
+// build instead, landing on exactly 699px at the 1440 reference width,
+// same ~8-line wrap as Figma there.
+const TEXT_COLUMN_WIDTH_PCT = (699 / 1360) * 100;
 
 // Viewport-fraction anchors for each effect's start/end scrollY — see the
 // component doc comment for the exact formulas these feed into.
@@ -41,7 +48,7 @@ const BLACK: [number, number, number] = [3, 0, 0]; // --fig-color-neutral-900 (t
 
 const HEADING_TEXT = "Your Problem, Our Mission to Solve";
 const PARAGRAPH_TEXT =
-  "We believe in bringing the best solutions by developing meaningful partnerships across the globe and applying their expertise to successfully implement comprehensive solutions in areas of fleet management, asset tracking, safety & surveillance and transport management with IoT. With a culture of innovation and excellence, people at FeizM are relentlessly working towards addressing business challenges with real-time data visibility";
+  "We believe in bringing the best solutions by developing meaningful partnerships across the globe and applying their expertise to successfully implement comprehensive solutions in areas of fleet management, asset tracking, safety & surveillance and transport management with IoT. ";
 
 function clamp(v: number, a: number, b: number) {
   return v < a ? a : v > b ? b : v;
@@ -324,6 +331,21 @@ export function HomeCompany() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [textFits, setTextFits] = useState(true);
   const [stickyTopPx, setStickyTopPx] = useState(0);
+  // The pin's own rendered height while pinned — `max(SECTION_H, viewport
+  // height − stickyTopPx)`, i.e. tall enough that the pin's bottom edge
+  // always reaches the viewport's own bottom edge (see the background-
+  // layer doc comment below). Computed in JS, not CSS `max()`/`calc()`,
+  // specifically so `wrapperHeight` can use this SAME number: a sticky
+  // element only stays stuck for as much extra scroll as its own
+  // containing block (the wrapper) has beyond the element's OWN height
+  // (`wrapper height − pin height`) — if the wrapper's height formula
+  // didn't grow by exactly as much as the pin grew, the pin would use up
+  // that slack just by being taller and release early, mid-hold (confirmed
+  // directly: with a CSS-only `calc(100svh - ...)` height here and the
+  // wrapper still sized off the old fixed SECTION_H, the pin visibly
+  // detached and scrolled away partway through what should have been
+  // PIN_LENGTH_VH worth of hold).
+  const [pinHeightPx, setPinHeightPx] = useState(SECTION_H);
 
   const effectivelyPinned = isDesktop && textFits && !reducedMotion;
 
@@ -404,7 +426,13 @@ export function HomeCompany() {
       const desiredHeadingTop = headerHeightPx() + TEXT_TOP_GAP_PX;
       const desiredParagraphBottom = desiredHeadingTop + textBlockHeight;
       setTextFits(desiredParagraphBottom <= vh - TEXT_BOTTOM_GAP_PX);
-      setStickyTopPx(Math.round(desiredHeadingTop - textTopOffset));
+      const newStickyTopPx = Math.round(desiredHeadingTop - textTopOffset);
+      setStickyTopPx(newStickyTopPx);
+      // See pinHeightPx's own comment — must stay in lockstep with
+      // stickyTopPx so the wrapper's own height formula (below) always
+      // grants exactly PIN_LENGTH_VH of hold beyond however tall the pin
+      // itself ends up being.
+      setPinHeightPx(Math.max(SECTION_H, Math.round(vh - newStickyTopPx)));
     }
 
     measureFit();
@@ -704,7 +732,7 @@ export function HomeCompany() {
           transition: `opacity ${APPEAR_DURATION_MS}ms ${APPEAR_EASE}, transform ${APPEAR_DURATION_MS}ms ${APPEAR_EASE}`,
         };
 
-  const wrapperHeight = effectivelyPinned ? `calc(${SECTION_H}px + ${PIN_LENGTH_VH}vh)` : "auto";
+  const wrapperHeight = effectivelyPinned ? `calc(${pinHeightPx}px + ${PIN_LENGTH_VH}vh)` : "auto";
 
   return (
     <section
@@ -717,64 +745,102 @@ export function HomeCompany() {
         zIndex: 1,
       }}
     >
+      {/* BACKGROUND layer — full-bleed (100% viewport width, and while
+          pinned, tall enough that its bottom edge always reaches the
+          viewport's own bottom edge regardless of SECTION_H) so the still-
+          fully-opaque Hero pin underneath (see HomeHeroParallax's own doc
+          comment — it stays mounted/stuck for this entire curtain+pin
+          sequence, not just hidden/removed) never shows through at the
+          edges or below. The CONTENT stays exactly where Figma puts it
+          (the stage below, unchanged size/position); only this box's own
+          extra height/width is new, and it's pure background — nothing
+          visual lives in that extra space but the white fill itself. */}
       <div
         ref={pinRef}
         id="home-company"
-        className="w-full overflow-hidden"
+        className="w-full"
         style={{
           ...(effectivelyPinned ? { position: "sticky", top: stickyTopPx } : { position: "relative" }),
-          width: isDesktop ? SECTION_W : "100%",
-          height: isDesktop ? SECTION_H : "auto",
-          justifyContent: isDesktop ? "flex-end" : undefined,
-          display: "flex",
-          flexDirection: "column",
+          width: "100%",
+          height: effectivelyPinned ? pinHeightPx : isDesktop ? SECTION_H : "auto",
           backgroundColor: "var(--fig-color-neutral-0)",
-          paddingLeft: "var(--fig-spacing-40)",
-          paddingRight: "var(--fig-spacing-40)",
-          paddingTop: "var(--fig-spacing-60)",
-          paddingBottom: "var(--fig-spacing-60)",
           fontFamily: "var(--font-hanken-grotesk)",
         }}
       >
-        {/* Base (always-visible) grayscale layer + the real orange layer
-            revealed on top via a mask that grows top-to-bottom with --p —
-            see the doc comment above. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/home-company/pattern.svg"
-          alt=""
-          aria-hidden
-          className="pointer-events-none absolute left-0 top-0"
-          style={{ filter: "grayscale(1)" }}
-        />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          ref={patternOrangeRef}
-          src="/home-company/pattern.svg"
-          alt=""
-          aria-hidden
-          className="pointer-events-none absolute left-0 top-0"
+        {/* CONTENT stage — the actual Figma frame (1440 reference width,
+            SECTION_H tall), centered within the full-bleed background
+            above and never stretched/recentered by its extra height — see
+            the doc comment above. `overflow-hidden` (Figma's own
+            clipsContent) lives here, not on the background box, so the
+            Pattern is cropped to this exact frame, same as Figma, not to
+            whatever taller box the background happens to be this tick. */}
+        <div
+          className="relative mx-auto overflow-hidden"
           style={{
-            maskImage: reducedMotion ? "none" : "linear-gradient(to bottom, black 0, transparent 0)",
-            WebkitMaskImage: reducedMotion ? "none" : "linear-gradient(to bottom, black 0, transparent 0)",
+            width: "100%",
+            maxWidth: SECTION_W,
+            height: isDesktop ? SECTION_H : "auto",
+            display: "flex",
+            flexDirection: "column",
+            paddingLeft: "var(--fig-spacing-40)",
+            paddingRight: "var(--fig-spacing-40)",
+            paddingTop: "80px", // re-read from Figma, was var(--fig-spacing-60) — no --fig-spacing-80 token exists
+            paddingBottom: "80px",
           }}
-        />
+        >
+          {/* Base (always-visible) grayscale layer + the real orange layer
+              revealed on top via a mask that grows top-to-bottom with --p —
+              see the doc comment above. Pattern re-exported fresh from
+              Figma (node "Pattern", 176:160493) via `figma-cli export node
+              ... -f svg` — NOT the raw vector's own x/y (which sits almost
+              entirely outside the 1440 frame before its 172.77° rotation
+              is applied); `absoluteRenderBounds` (the post-rotation,
+              post-clip VISUAL box) is what matches what's actually on
+              screen: 1149.06×664.87, flush against the frame's own right
+              edge (offset 290.94px from the left — exactly 1440−1149.06),
+              hence `right-0`, not `left-0`. One single fan-shaped vector,
+              not two separate instances — its own rays simply diverge
+              toward both the left and right as they fan out going down. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/home-company/pattern.svg"
+            alt=""
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-0"
+            style={{ filter: "grayscale(1)" }}
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={patternOrangeRef}
+            src="/home-company/pattern.svg"
+            alt=""
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-0"
+            style={{
+              maskImage: reducedMotion ? "none" : "linear-gradient(to bottom, black 0, transparent 0)",
+              WebkitMaskImage: reducedMotion ? "none" : "linear-gradient(to bottom, black 0, transparent 0)",
+            }}
+          />
 
-        <div className="relative flex flex-col" style={{ gap: "var(--fig-spacing-60)" }}>
-          <h2
-            ref={headingWrapRef}
-            className="font-normal"
-            style={{ fontSize: "44px", lineHeight: "44.9px", ...appearStyle() }}
+          <div
+            className="relative flex flex-col"
+            style={{ width: `${TEXT_COLUMN_WIDTH_PCT}%`, gap: "59.87px" /* Container's own itemSpacing, re-read — was wrongly 64 (that's the OUTER frame's spacing, between Pattern/Frame 7, not the text gap) */ }}
           >
-            <SweepWords text={HEADING_TEXT} startIndex={0} wordRefs={wordRefs} />
-          </h2>
-          <p
-            ref={paragraphWrapRef}
-            className="font-normal"
-            style={{ fontSize: "44px", lineHeight: "49.9px", ...appearStyle() }}
-          >
-            <SweepWords text={PARAGRAPH_TEXT} startIndex={headingWordCount} wordRefs={wordRefs} />
-          </p>
+            <h2
+              ref={headingWrapRef}
+              className="font-normal"
+              style={{ fontSize: "40px", lineHeight: "44.9px", ...appearStyle() }}
+            >
+              <SweepWords text={HEADING_TEXT} startIndex={0} wordRefs={wordRefs} />
+            </h2>
+            <p
+              ref={paragraphWrapRef}
+              className="font-normal"
+              style={{ fontSize: "40px", lineHeight: "49.9px", ...appearStyle() }}
+            >
+              <SweepWords text={PARAGRAPH_TEXT} startIndex={headingWordCount} wordRefs={wordRefs} />
+            </p>
+          </div>
         </div>
       </div>
     </section>
