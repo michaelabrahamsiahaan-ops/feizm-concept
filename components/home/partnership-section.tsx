@@ -1,7 +1,6 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { SectionBadge } from "@/components/SectionBadge";
 import { ScrollFrameSequence, type ScrollFrameSequenceHandle } from "@/components/shared/scroll-frame-sequence";
 
@@ -9,43 +8,45 @@ import { ScrollFrameSequence, type ScrollFrameSequenceHandle } from "@/component
 // 60px/40px section padding at its 1440 reference width). ----
 const SIDE_INSET = "clamp(16px, 2.8vw, 64px)";
 const VERTICAL_INSET = "clamp(24px, 4.17vw, 96px)";
-// Extra space rendered INSIDE the left column, right after copy 2 (see
-// where it's used below) — needed because this is currently the LAST
-// section on the page (no footer yet). This has to live inside the left
-// column specifically: the right column's sticky travel range comes from
-// the ROW's own stretched height (flex `align-items: stretch`), which
-// itself comes from the LEFT column's content height — extra height
-// anywhere else (e.g. section padding outside the row) does nothing to
-// the sticky's containing block. Without it, two things break at once:
-// copy 2's reveal (triggers at ~85% of viewport) never fires because the
-// document can't scroll far enough for copy 2 to cross that threshold,
-// AND the sticky device releases and scrolls away well BEFORE copy 2
-// reaches center (confirmed both ways by measurement at 1440x900).
-// Tuned empirically (not derived from a closed-form formula — the sticky
-// release point depends on the row's stretched height in a way that's
-// easy to get sign/offset errors in by hand) to the smallest value that
-// keeps the device visible and sticky through copy 2 reaching center at
-// both 1440x900 and 1280x720.
-const BOTTOM_SPACER_VH = 50;
 const CONTENT_MAX_WIDTH_PX = 1600; // matches StatsSection's own CARD_MAX_WIDTH_PX
-// 120px in Figma between the copy column and the device, reused as the
-// column gap here (fluid so it doesn't force the layout wider than the
-// viewport below the 1440 reference width it was measured at).
-const COLUMN_GAP = "clamp(40px, 8vw, 120px)";
-// Figma's own gap between the badge/heading block and the first copy row
-// (59.87px, "Container"'s own itemSpacing on node 212:343206).
-const HEADING_TO_COPY1_GAP = "clamp(24px, 4.16vw, 60px)";
-// Each copy <p>'s own literal Figma text-node width (NOT the hugged
-// Container width) — 577 for "Geotab brings…" (213:343268), 616 for
-// "Feizm brings…" (216:343281), read directly off each TEXT node, not
-// derived from the row's available space. They differ in Figma itself
-// (confirmed: row 2's text is fixed at exactly its row's available width,
-// row 1's is narrower than ITS row's available width) — kept as two
-// distinct caps rather than forced to match, so both wrap the same way
-// Figma does (2 lines each).
-const COPY1_MAX_WIDTH_PX = 577;
-const COPY2_MAX_WIDTH_PX = 616;
-const RIGHT_COLUMN_WIDTH = "min(40vw, 624px)"; // Figma's own 624x624 device box, capped
+
+// ---- Left column width ----
+// Figma's two copy TEXT nodes are each individually a FIXED width, not a
+// shared column: the Geotab block is 577px wide, the Feizm block 616px
+// (read directly off each node's own `width` in Figma, confirmed via
+// `figma-cli eval` — not a HUG-to-content artifact, both report
+// `sizeH: "FIXED"`), each sized just narrow enough to wrap its own copy
+// into exactly 2 lines. A real two-column layout needs ONE shared left-
+// column width, so this uses the wider of the two (616px) — verified live
+// that the Geotab copy still wraps to exactly 2 lines at 616px too (see
+// this component's own Step-3 verification), so nothing is lost by
+// sharing one width instead of Figma's two slightly different ones.
+const COPY_MAX_WIDTH_PX = 616;
+
+// ---- Vertical scroll distance between the two copy blocks (named per
+// the brief, which explicitly invited adjusting it: "adjust if Figma's
+// spacing suggests otherwise"). Figma has no equivalent value to read
+// here (this scrolling structure doesn't exist in Figma at all — see
+// this component's own doc comment), so 80 was a starting guess that
+// turned out too small: the right column's total height (both copy
+// blocks + this gap) must be MEANINGFULLY taller than the sticky
+// device's own box, or there's no real room for `position: sticky` to
+// visibly hold — at 80vh the two were within ~15px of each other, which
+// technically still satisfies the CSS spec (confirmed directly: it does
+// stick, briefly) but reads as "doesn't stick at all" to a scrolling user
+// and even an automated headless Chromium check (separately confirmed:
+// headless Chromium's own position:sticky implementation glitches and
+// never visibly catches at all when the margin is this tight, where a
+// real Chromium window does — see this component's own Step-3 notes).
+// 130 gives the box several hundred px of genuine, clearly visible stuck
+// room while keeping the section meaningfully shorter than the old
+// full-section-pin build (verified).
+const COPY_GAP_VH = 130;
+
+// ---- Mobile (<1024px) sticky device height — confirmed with the user
+// (AskUserQuestion) before building: device sticky near the top at
+// ~45vh, copy scrolling underneath, rather than the two-column layout.
+const MOBILE_DEVICE_VH = 45;
 
 // ---- Device frame sequence (public/illustrations/device/, copied from
 // ~/Downloads/device-scroll/ — see that folder's own README.md for the
@@ -55,7 +56,7 @@ const RIGHT_COLUMN_WIDTH = "min(40vw, 624px)"; // Figma's own 624x624 device box
 //     frames, not re-applied here — see ScrollFrameSequence's own comment)
 //   0.70-0.80 settled, LEDs off
 //   0.80-0.95 LEDs light red -> green -> blue
-//   0.95-1.00 final lit state, held ----
+//   0.95-1.00 final lit state, held
 const FRAME_COUNT = 48;
 const DEVICE_FRAME_URLS = Array.from(
   { length: FRAME_COUNT },
@@ -63,36 +64,36 @@ const DEVICE_FRAME_URLS = Array.from(
 );
 const DEVICE_FALLBACK_SRC = "/illustrations/device/device-final-lit.webp";
 
-// ---- Copy layout ----
-// Vertical gap between copy 1 and copy 2 specifically (NOT the
-// heading-to-copy1 gap) — large on purpose, so each copy block gets
-// roughly its own viewport of scroll to rise into, settle, and own a
-// phase of the device animation before the next one starts entering.
-const COPY_GAP_VH = 80;
+// ---- Device progress breakpoints, expressed as p (0..1) at four named
+// phases of SCROLL POSITION (not of the frame index) — see this
+// component's own doc comment for how scroll position maps to these. ----
+const P_COPY1_START = 0;
+const P_COPY1_CENTER = 0.7;
+const P_COPY2_START = 0.8;
+const P_COPY2_CENTER = 1;
 
-// ---- Device progress phases (p 0->1, driven by the copy blocks' own
-// scroll position — see measure()/paint() below) ----
-const PHASE1_END = 0.7; // copy 1 bottom-of-viewport -> center: p 0 -> 0.70
-const PHASE2_END = 0.8; // gap between the copies: p 0.70 -> 0.80
-// copy 2 bottom-of-viewport -> center: p 0.80 -> 1.00
-
-// ---- Copy reveal (joinsystems.co-style rise-in) ----
+// ---- Reveal ("rises in once", joinsystems.co-style) ----
+const REVEAL_TRANSLATE_PX = 40;
 const REVEAL_DURATION_MS = 800;
 const REVEAL_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
-const REVEAL_TRANSLATE_PX = 40;
-// "~85% of the viewport height" => shrink the IntersectionObserver's
-// effective viewport by 15% from the bottom, so isIntersecting flips true
-// exactly when the element enters that top 85% band.
+// Shrinking the IntersectionObserver's effective root by 15% from the
+// bottom is the standard way to express "fires when the element's top
+// crosses 85% down the viewport".
 const REVEAL_ROOT_MARGIN = "0px 0px -15% 0px";
 
-// ---- Optional focus-dim (behind a flag, see this component's own doc
-// comment — built so both variants can be screenshotted and compared) ----
+// ---- Optional focus-dim — built behind a flag per the brief ("build it
+// behind a flag and show me both"). OFF by default: without it, both
+// copy blocks simply stay fully visible once revealed, per the brief's
+// own default behavior. Flip to `true` to compare.
 const ENABLE_FOCUS_DIM = false;
 const FOCUS_DIM_OPACITY = 0.35;
-const FOCUS_DIM_DURATION_MS = 300;
+const FOCUS_DIM_MS = 300;
+// Switches at the midpoint of the 0.70->0.80 "between copies" gap — the
+// one p value with no better claim to either copy block.
+const FOCUS_DIM_SWITCH_P = (P_COPY1_CENTER + P_COPY2_START) / 2;
 
-function clamp(v: number, a: number, b: number) {
-  return v < a ? a : v > b ? b : v;
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }
 
 const COPY = {
@@ -101,185 +102,189 @@ const COPY = {
 };
 
 /**
- * Attaches the joinsystems.co-style "rise in once" reveal to one element:
- * opacity 0 + translateY(REVEAL_TRANSLATE_PX) -> opacity 1 + translateY(0)
- * over REVEAL_DURATION_MS, triggered the first time the element crosses
- * into the top 85% of the viewport (REVEAL_ROOT_MARGIN), and never
- * reverses (the observer disconnects itself after firing once — scrolling
- * back up never re-hides it).
+ * Wires up one reveal-once block: starts hidden (opacity 0, translateY
+ * `REVEAL_TRANSLATE_PX`) and animates to visible the first time `wrapper`
+ * crosses `REVEAL_ROOT_MARGIN`'s threshold, then disconnects — it never
+ * re-hides on scroll back up. If `wrapper` has ALREADY crossed that
+ * threshold at setup time (page loaded mid-section, or landed via an
+ * anchor link), it's shown immediately with `transition: none`, per the
+ * brief ("show it immediately without animating") — this is a
+ * synchronous check done BEFORE the IntersectionObserver is even
+ * attached, not a race against its first callback.
  *
- * "If the page loads with a block already past its trigger point, show it
- * immediately without animating": the very first IntersectionObserver
- * callback can fire with `isIntersecting: true` on mount (e.g. a reload
- * mid-page) — that first callback applies the revealed state with
- * `transition: none` instead of the normal transition, so there's nothing
- * to animate from. Every later (real, scroll-triggered) callback gets the
- * normal timed transition.
- *
- * Returns a disconnect function for cleanup. Does nothing (and returns a
- * no-op) when `el` is null, so callers can call this unconditionally in a
- * layout effect without their own null-guard.
+ * `wrapper` and `text` are separate elements (not always the same node):
+ * `wrapper` is what gets measured/observed (a plain, never-transformed
+ * box), `text` is what actually receives the opacity/transform styles.
+ * Splitting them matters for the copy blocks specifically — their
+ * `wrapper` is also what the device-progress effect below measures for
+ * scroll breakpoints, and measuring a node that's mid-translateY would
+ * read a few px off from its true document position.
  */
-function attachReveal(el: HTMLElement | null): () => void {
-  if (!el) return () => {};
-  el.style.opacity = "0";
-  el.style.transform = `translateY(${REVEAL_TRANSLATE_PX}px)`;
-  el.style.transition = "none";
+function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () => void): () => void {
+  const thresholdY = window.innerHeight * 0.85;
+  if (wrapper.getBoundingClientRect().top <= thresholdY) {
+    text.style.transition = "none";
+    text.style.opacity = "1";
+    text.style.transform = "translateY(0px)";
+    onRevealed?.();
+    return () => {};
+  }
 
-  let firstCallback = true;
+  text.style.opacity = "0";
+  text.style.transform = `translateY(${REVEAL_TRANSLATE_PX}px)`;
+  text.style.transition = `opacity ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}, transform ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}`;
+
   const io = new IntersectionObserver(
     (entries) => {
-      if (!entries[0].isIntersecting) {
-        firstCallback = false;
-        return;
-      }
-      if (!firstCallback) {
-        el.style.transition = `opacity ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}, transform ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}`;
-      }
-      // Two rAFs: one to let the (possibly "none") transition value
-      // commit as a style, a second before flipping the animated
-      // properties — otherwise the browser can coalesce the transition
-      // and the property change into the same frame and skip straight to
-      // the end state even when a real transition was requested.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          el.style.opacity = "1";
-          el.style.transform = "translateY(0px)";
-        });
-      });
-      firstCallback = false;
+      if (!entries[0].isIntersecting) return;
+      text.style.opacity = "1";
+      text.style.transform = "translateY(0px)";
+      onRevealed?.();
       io.disconnect();
     },
     { rootMargin: REVEAL_ROOT_MARGIN },
   );
-  io.observe(el);
+  io.observe(wrapper);
   return () => io.disconnect();
 }
 
 /**
  * "Partnership" section of the Feizm Homepage ("Home / 05 Partnership",
- * node 212:343205, read live via `figma-cli`).
+ * node 212:343205, read live via `figma-cli`) — joinsystems.co-style
+ * structure: the device stays fixed on the right while the copy column
+ * scrolls normally on the left, replacing an earlier full-section-pin
+ * build (see git history) that put both copy blocks at one fixed spot
+ * and crossfaded between them, which wasn't what was asked for.
  *
  * ---- What Figma actually has vs. what this builds ----
  * Figma's own frame is fully static: a badge+heading row, then TWO
  * identical rows (copy left, 624x624 device image right) stacked 120px
- * apart — both device images are pixel-identical to the supplied
- * `device-final-lit.png` (the same static asset placed twice, not two
- * different illustrations — confirmed directly, not assumed). No
- * prototype/reaction data exists on any node in this frame. The
- * scroll-scrubbed rotation + joinsystems.co-style sticky layout below is
- * a deliberate web-only enhancement, confirmed with the user.
+ * apart, and both device images are pixel-identical to the supplied
+ * `device-final-lit.png` — the same static asset placed twice, not two
+ * different illustrations or states. No prototype/reaction data exists
+ * on any node in this frame. The scroll-scrubbed rotation/reveal below is
+ * a deliberate web-only enhancement, confirmed with the user:
+ *   - ONE device (not two) sits sticky on the right for the whole
+ *     section, cycling its 48-frame rotation via `ScrollFrameSequence`
+ *     as the copy column scrolls past it
+ *   - the badge ("Partnership", byte-identical styling to the existing
+ *     `SectionBadge`) and heading ("Global technology.\nLocal people who
+ *     make it work.", 42px/43px Hanken Grotesk) are reproduced as-is
+ *   - copy width uses a single shared 616px column (`COPY_MAX_WIDTH_PX`
+ *     — see its own comment for why, given Figma's two text boxes are
+ *     577/616 individually)
+ *   - the hidden "Partner Logos" row (9 logos incl. Esri, `visible:
+ *     false` in Figma) stays left out, same as the previous build
+ *   - the background gradient (#FEEFEA -> #FFFFFF) still uses this
+ *     project's own `--fig-color-brand-50` token for its start stop
  *
- * ---- Structure (replaces an earlier full-section-pin build) ----
- * This is now a NORMAL-FLOW section, not pinned. Two columns at >=1024px:
- *   - LEFT: badge+heading row, then copy 1, then copy 2 — real HTML text
- *     in document order, each copy block's own max-width taken directly
- *     from its Figma text node (577px / 616px — see COPY1/2_MAX_WIDTH_PX,
- *     these are NOT the same value in Figma and are kept distinct on
- *     purpose), separated by `COPY_GAP_VH` (80vh) so each one gets
- *     roughly a full viewport of scroll to rise into and own a phase of
- *     the device animation.
- *   - RIGHT: ONLY the device canvas, inside a `position: sticky` box
- *     (`top: var(--header-h)`, `height: calc(100svh - var(--header-h))`,
- *     centered) nested in a right-column div with NO explicit height of
- *     its own — flexbox's default `align-items: stretch` on the row makes
- *     that outer div match the LEFT column's full (much taller) natural
- *     height, which is what gives the sticky box something to stick
- *     *within* and release from cleanly once the row's bottom (= left
- *     column's bottom) scrolls up to it. No JS manages the stickiness —
- *     it's plain CSS, same as any sticky-sidebar-next-to-long-content
- *     layout.
+ * ---- Structure ----
+ * A single relative section, no section-level pin. Below the badge+
+ * heading row, either (>=1024px) a two-column flex row or (<1024px) a
+ * single stacked column — see "Below 1024px" further down:
+ *   - Copy: copy 1, a `COPY_GAP_VH` spacer, copy 2 — all in normal
+ *     document flow, real HTML text, reading order preserved.
+ *   - Device: a `position: sticky` box that flex-centers the device
+ *     inside it, sized/positioned so it reads as "stays in place" while
+ *     the copy scrolls past (standard sticky-sidebar technique) until
+ *     its own containing block's bottom edge approaches, at which point
+ *     it releases and scrolls away with the rest of the section — no
+ *     separate release logic, this falls out of `position: sticky` for
+ *     free. On desktop that containing block is the RIGHT column, grown
+ *     to match the LEFT column's height by the flex row's own default
+ *     `align-items: stretch` (no JS height math needed for this part).
  *
- * ---- Device progress (p 0->1) ----
- * Driven by where the two copy blocks ACTUALLY are on screen, not by a
- * pin wrapper (there isn't one anymore):
- *   - copy 1 moving from entering the viewport bottom to centered -> p
- *     0.00 -> PHASE1_END (0.70)
- *   - the gap between copy 1 centered and copy 2 entering -> p
- *     PHASE1_END -> PHASE2_END (0.70 -> 0.80)
- *   - copy 2 moving from entering the viewport bottom to centered -> p
- *     PHASE2_END -> 1.00
- * Implemented the same measure()/paint() split as the Fleet USP divider
- * dot (components/fleet/usp-divider-dot.tsx): `measure()` converts each
- * copy block's live position into fixed DOCUMENT-space scrollY
- * thresholds (`enter1`/`centered1`/`enter2`/`centered2` — the scrollY at
- * which that block's center reaches the viewport bottom / viewport
- * center, respectively) and caches them in refs; `paint()`, which runs on
- * every scroll tick, only reads `window.scrollY` against those cached
- * thresholds — no `getBoundingClientRect()` in the scroll path itself.
- * Re-measured on resize, when the copy blocks' own layout changes
- * (ResizeObserver on each), and — same fix as the USP dot, for the same
- * reason — on `document.body` resize, since this is currently the LAST
- * section on the page: `centered2`'s NATURAL value (where copy 2 would
- * sit exactly centered) can fall past the document's actual max scrollY
- * when there isn't enough page left below it, which without a clamp
- * would strand `p` short of 1 forever (the page physically can't scroll
- * that far). Clamping `centered2` (and `enter2`) to `maxScrollY` makes
- * `p` reach exactly 1.00 at the real end of the page, however much of
- * copy 2's approach that corresponds to today, and stops mattering on its
- * own once more sections push the real max scroll past the natural value.
+ * The device's own containing block needs to be MEANINGFULLY taller than
+ * the sticky box itself for this to actually be visible (confirmed
+ * directly: at `COPY_GAP_VH`'s first value, 80, the two were within
+ * ~15px of each other — technically still spec-correct, briefly
+ * sticking, but imperceptible to a scrolling user, and even unreliable
+ * under automated headless-Chromium checks specifically, which were
+ * separately confirmed to under-render `position: sticky` in this exact
+ * tight-margin situation where a real Chromium window does stick — see
+ * `COPY_GAP_VH`'s own comment). 130 gives several hundred px of genuine
+ * stuck room on desktop; `MOBILE_DEVICE_VH`'s much shorter box leaves
+ * comparatively enormous slack by the same logic.
  *
- * ---- Copy reveal ----
- * `attachReveal()` (above) handles the "rise in once at ~85% of the
- * viewport, never fades back out" behavior for the heading/badge row and
- * both copy blocks independently — plain opacity/transform CSS
- * transitions, not scroll-tick-driven, so they cost nothing in the p
- * scroll handler.
+ * ---- Device progress (p) — tied to copy position, not a pin formula ----
+ * Each copy block's own ABSOLUTE document Y (measured once via its
+ * `wrapper`'s `getBoundingClientRect() + window.scrollY`, not re-read on
+ * every scroll tick) gives four scroll-position breakpoints:
+ *   b0 = copy1CenterY - viewportH        (copy 1 at the viewport BOTTOM)
+ *   b1 = copy1CenterY - viewportH / 2     (copy 1 at the viewport CENTER)
+ *   b2 = copy2CenterY - viewportH        (copy 2 at the viewport BOTTOM)
+ *   b3 = copy2CenterY - viewportH / 2     (copy 2 at the viewport CENTER)
+ * `p` is piecewise-linear across them: b0->b1 maps to `P_COPY1_START ->
+ * P_COPY1_CENTER` (0 -> 0.70), b1->b2 to 0.70 -> 0.80, b2->b3 to 0.80 ->
+ * 1.00 — i.e. copy 1's own entrance drives the back-view-to-rotation
+ * phase, the quiet gap between copies drives the settled/LEDs-off phase,
+ * and copy 2's entrance drives the LED-lighting phase, exactly as asked.
  *
- * ---- Optional focus-dim (ENABLE_FOCUS_DIM) ----
- * When true, the copy block that ISN'T paired with the device's current
- * phase (p < 0.75 => copy 1 is "active", >= 0.75 => copy 2 is) dims to
- * FOCUS_DIM_OPACITY over FOCUS_DIM_DURATION_MS. Implemented as a SEPARATE
- * nested wrapper around each copy's text (its own opacity + transition,
- * independent of and multiplying with the reveal wrapper's opacity) so it
- * never fights the reveal-in transition's own timing/easing. Off by
- * default — both stay fully visible once revealed, per the brief.
+ * `b3` (and, chained through it, b0-b2) is clamped against the document's
+ * real max scrollY — same technique as `UspDividerDot`
+ * (components/fleet/usp-divider-dot.tsx): this is currently the last
+ * section on the page, so the "natural" b3 (copy 2 truly centered) can
+ * sit past what the page can physically scroll to. Without the clamp, p
+ * would get stuck short of 1 forever once the user hits the document's
+ * real bottom. A `ResizeObserver` on `document.body` re-measures whenever
+ * the document's total height changes (more sections added below later),
+ * so the clamp automatically stops mattering once there's real content
+ * after this section providing the scroll room on its own.
+ *
+ * `measure()` (breakpoints) and `paint()` (p + device draw, reads
+ * `window.scrollY` only) are split the same way as `UspDividerDot` for
+ * the same reason: `paint()` runs on every scroll tick and must stay
+ * cheap (no `getBoundingClientRect()` in that path), while `measure()`
+ * only needs to re-run on resize / document-height change.
+ *
+ * ---- Reveal ----
+ * `setupReveal()` (above) handles the heading+badge row and each copy
+ * block identically — hidden until ~85% down the viewport, then rises in
+ * once, never re-hides. The optional focus-dim (`ENABLE_FOCUS_DIM`) only
+ * ever dims a block AFTER it has revealed (tracked via
+ * `copy{1,2}RevealedRef`) — otherwise a not-yet-revealed block could be
+ * nudged to 0.35 opacity by the dim logic before its own reveal animation
+ * ever ran, which would show it prematurely instead of rising in from
+ * fully hidden.
  *
  * ---- Reduced motion ----
- * No reveal animation, no scrub, no sticky: both copy blocks render at
- * their final state immediately, and the device is a plain static
- * `device-final-lit.webp` image next to them (ScrollFrameSequence's own
- * `reducedMotion` branch) — same two-column shape, just inert.
+ * The ONLY path that skips sticky/reveal/scrub entirely: both copy
+ * blocks stacked and visible with `device-final-lit.webp` as a plain
+ * image — this is Figma's own static design at p=1, not an arbitrary
+ * stand-in.
  *
  * ---- Below 1024px ----
- * Not an approved design yet — ask before building the real mobile
- * layout. `isDesktop` (plain `matchMedia`, SSR-safe default true,
- * corrected post-mount) gates ONLY the sticky positioning; the column
- * ↔ stack switch itself is Tailwind's own `lg:flex-row` (a compiled CSS
- * breakpoint, not JS, so there's no hydration-mismatch risk for that
- * part). Below 1024px this renders as an inert stacked fallback — the
- * device scrolls in normal flow (not stuck) at a smaller placeholder
- * width — not the real mobile design.
+ * Proposed to the user and confirmed (not guessed) before building: the
+ * device stays sticky near the TOP of the screen at `MOBILE_DEVICE_VH`
+ * (~45vh) instead of a right column, with both copy blocks stacked
+ * underneath it in normal flow. Same `position: sticky` mechanism, same
+ * reveal/progress wiring (`copy{1,2}WrapRef`, `setupReveal`, the
+ * breakpoint math) — only the JSX arrangement differs; p is computed
+ * purely from the copy blocks' own position, which doesn't care whether
+ * they're laid out beside the device or below it.
  */
 export function PartnershipSection() {
-  const wrapperRef = useRef<HTMLElement | null>(null);
-  const headingRowRef = useRef<HTMLDivElement | null>(null);
-  // copy1Ref/copy2Ref point at the stable, NEVER-transformed <p> wrappers
-  // (read by the scroll-math measure() below) — the reveal's own
-  // opacity/translateY is applied to a separate inner span
-  // (copy1RevealRef/copy2RevealRef) instead of these, specifically so a
-  // getBoundingClientRect() read during/after the reveal transition never
-  // picks up its transform offset (see this component's own doc comment).
-  const copy1Ref = useRef<HTMLParagraphElement | null>(null);
-  const copy2Ref = useRef<HTMLParagraphElement | null>(null);
-  const copy1RevealRef = useRef<HTMLSpanElement | null>(null);
-  const copy2RevealRef = useRef<HTMLSpanElement | null>(null);
-  const copy1DimRef = useRef<HTMLSpanElement | null>(null);
-  const copy2DimRef = useRef<HTMLSpanElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const headingWrapRef = useRef<HTMLDivElement | null>(null);
+  const copy1WrapRef = useRef<HTMLDivElement | null>(null);
+  const copy1TextRef = useRef<HTMLParagraphElement | null>(null);
+  const copy2WrapRef = useRef<HTMLDivElement | null>(null);
+  const copy2TextRef = useRef<HTMLParagraphElement | null>(null);
   const deviceRef = useRef<ScrollFrameSequenceHandle | null>(null);
 
+  const copy1RevealedRef = useRef(false);
+  const copy2RevealedRef = useRef(false);
+
+  // Scroll-position breakpoints (abs document Y, px) — see this
+  // component's own doc comment for b0..b3's meaning.
+  const b0Ref = useRef(0);
+  const b1Ref = useRef(1);
+  const b2Ref = useRef(2);
+  const b3Ref = useRef(3);
+
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [inView, setInView] = useState(false);
-  // Gates the sticky positioning specifically (not the column layout,
-  // which is plain Tailwind `lg:flex-row` — a compiled CSS breakpoint,
-  // not JS, so it can't mismatch on hydration). Below 1024px this section
-  // doesn't have an approved design yet (see this component's own doc
-  // comment) — `position: sticky` on the device would still technically
-  // "work" stacked in a column, just not as anything reviewed, so it's
-  // switched off there rather than shipped un-asked-for. SSR-safe default
-  // true, corrected post-mount — same tradeoff as every other
-  // measured-after-mount value in this project.
   const [isDesktop, setIsDesktop] = useState(true);
+  const [inView, setInView] = useState(false);
 
   useLayoutEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -292,29 +297,15 @@ export function PartnershipSection() {
 
   useLayoutEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- matchMedia has no SSR-safe value, same tradeoff as reducedMotion above
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- matchMedia has no SSR-safe value, same tradeoff as the reducedMotion check above
     setIsDesktop(mq.matches);
     const onChange = () => setIsDesktop(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // ---- Reveal: heading row + both copy blocks, independent of the
-  // scroll-linked device progress below. ----
   useLayoutEffect(() => {
-    if (reducedMotion) return;
-    const disconnectHeading = attachReveal(headingRowRef.current);
-    const disconnectCopy1 = attachReveal(copy1RevealRef.current);
-    const disconnectCopy2 = attachReveal(copy2RevealRef.current);
-    return () => {
-      disconnectHeading();
-      disconnectCopy1();
-      disconnectCopy2();
-    };
-  }, [reducedMotion]);
-
-  useLayoutEffect(() => {
-    const el = wrapperRef.current;
+    const el = sectionRef.current;
     if (!el) return;
     const io = new IntersectionObserver((entries) => setInView(entries[0].isIntersecting), {
       rootMargin: "100% 0px 100% 0px",
@@ -323,77 +314,93 @@ export function PartnershipSection() {
     return () => io.disconnect();
   }, []);
 
-  // ---- Device progress (p) + optional focus-dim — see this component's
-  // own doc comment for the measure()/paint() split and the maxScrollY
-  // clamp (same technique as the Fleet USP divider dot). ----
+  // ---- Reveal wiring (heading row + both copy blocks) ----
   useLayoutEffect(() => {
     if (reducedMotion) return;
-    const copy1 = copy1Ref.current;
-    const copy2 = copy2Ref.current;
+    const cleanups: Array<() => void> = [];
+    if (headingWrapRef.current) {
+      cleanups.push(setupReveal(headingWrapRef.current, headingWrapRef.current));
+    }
+    if (copy1WrapRef.current && copy1TextRef.current) {
+      cleanups.push(
+        setupReveal(copy1WrapRef.current, copy1TextRef.current, () => {
+          copy1RevealedRef.current = true;
+        }),
+      );
+    }
+    if (copy2WrapRef.current && copy2TextRef.current) {
+      cleanups.push(
+        setupReveal(copy2WrapRef.current, copy2TextRef.current, () => {
+          copy2RevealedRef.current = true;
+        }),
+      );
+    }
+    return () => cleanups.forEach((fn) => fn());
+  }, [reducedMotion]);
+
+  // ---- Device progress (p), tied to copy position — see this
+  // component's own doc comment for the full breakpoint math. ----
+  useLayoutEffect(() => {
+    if (reducedMotion) return;
+    const copy1 = copy1WrapRef.current;
+    const copy2 = copy2WrapRef.current;
     if (!copy1 || !copy2) return;
 
-    const enter1Ref = { current: 0 };
-    const centered1Ref = { current: 1 };
-    const enter2Ref = { current: 2 };
-    const centered2Ref = { current: 3 };
-    let activePhaseRef: 1 | 2 = 1;
-
     function measure() {
-      const vh = window.innerHeight;
+      const viewportH = window.innerHeight;
       const r1 = copy1!.getBoundingClientRect();
       const r2 = copy2!.getBoundingClientRect();
-      const scrollY = window.scrollY;
-      const center1Doc = r1.top + scrollY + r1.height / 2;
-      const center2Doc = r2.top + scrollY + r2.height / 2;
-      const maxScrollY = Math.max(0, document.documentElement.scrollHeight - vh);
+      const copy1CenterAbs = r1.top + window.scrollY + r1.height / 2;
+      const copy2CenterAbs = r2.top + window.scrollY + r2.height / 2;
+      const maxScrollY = Math.max(0, document.documentElement.scrollHeight - viewportH);
 
-      const enter1 = center1Doc - vh;
-      const centered1 = center1Doc - vh / 2;
-      const naturalEnter2 = center2Doc - vh;
-      const naturalCentered2 = center2Doc - vh / 2;
+      const raw0 = copy1CenterAbs - viewportH;
+      const raw1 = copy1CenterAbs - viewportH / 2;
+      const raw2 = copy2CenterAbs - viewportH;
+      const raw3 = copy2CenterAbs - viewportH / 2;
 
-      enter1Ref.current = enter1;
-      centered1Ref.current = Math.max(centered1, enter1 + 1);
-      // Clamp to the document's real max scroll — see this component's
-      // own doc comment (same fix as the Fleet USP divider dot) — so p
-      // reaches exactly 1 at the real end of the page even when there
-      // isn't enough room below copy 2 for it to naturally reach center.
-      const enter2 = Math.min(naturalEnter2, maxScrollY);
-      const centered2 = Math.min(naturalCentered2, maxScrollY);
-      enter2Ref.current = Math.max(enter2, centered1Ref.current + 1);
-      centered2Ref.current = Math.max(centered2, enter2Ref.current + 1);
+      // Clamp monotonically against the document's real max scroll (see
+      // this component's own doc comment — same technique as
+      // UspDividerDot) and guard against a degenerate (zero-width) range
+      // between adjacent breakpoints, which would divide by ~0 below.
+      const c0 = Math.min(raw0, maxScrollY);
+      const c1 = Math.max(Math.min(raw1, maxScrollY), c0 + 1);
+      const c2 = Math.max(Math.min(raw2, maxScrollY), c1);
+      const c3 = Math.max(Math.min(raw3, maxScrollY), c2 + 1);
+
+      b0Ref.current = c0;
+      b1Ref.current = c1;
+      b2Ref.current = c2;
+      b3Ref.current = c3;
+    }
+
+    function progressFor(scrollY: number) {
+      const b0 = b0Ref.current;
+      const b1 = b1Ref.current;
+      const b2 = b2Ref.current;
+      const b3 = b3Ref.current;
+      if (scrollY <= b0) return P_COPY1_START;
+      if (scrollY >= b3) return P_COPY2_CENTER;
+      if (scrollY <= b1) return lerp(P_COPY1_START, P_COPY1_CENTER, (scrollY - b0) / (b1 - b0));
+      if (scrollY <= b2) return lerp(P_COPY1_CENTER, P_COPY2_START, (scrollY - b1) / (b2 - b1));
+      return lerp(P_COPY2_START, P_COPY2_CENTER, (scrollY - b2) / (b3 - b2));
     }
 
     function paint() {
-      const scrollY = window.scrollY;
-      const enter1 = enter1Ref.current;
-      const centered1 = centered1Ref.current;
-      const enter2 = enter2Ref.current;
-      const centered2 = centered2Ref.current;
-
-      const c1 = clamp((scrollY - enter1) / (centered1 - enter1), 0, 1);
-      const c2 = clamp((scrollY - enter2) / (centered2 - enter2), 0, 1);
-
-      let p: number;
-      if (scrollY <= centered1) {
-        p = c1 * PHASE1_END;
-      } else if (scrollY <= enter2) {
-        const g = clamp((scrollY - centered1) / (enter2 - centered1), 0, 1);
-        p = PHASE1_END + g * (PHASE2_END - PHASE1_END);
-      } else {
-        p = PHASE2_END + c2 * (1 - PHASE2_END);
-      }
-      p = clamp(p, 0, 1);
+      const p = progressFor(window.scrollY);
       deviceRef.current?.setProgress(p);
 
       if (ENABLE_FOCUS_DIM) {
-        const nextPhase: 1 | 2 = p < 0.75 ? 1 : 2;
-        if (nextPhase !== activePhaseRef) {
-          activePhaseRef = nextPhase;
-          const dim1 = copy1DimRef.current;
-          const dim2 = copy2DimRef.current;
-          if (dim1) dim1.style.opacity = nextPhase === 1 ? "1" : `${FOCUS_DIM_OPACITY}`;
-          if (dim2) dim2.style.opacity = nextPhase === 2 ? "1" : `${FOCUS_DIM_OPACITY}`;
+        const t1 = copy1TextRef.current;
+        const t2 = copy2TextRef.current;
+        const copy1Active = p < FOCUS_DIM_SWITCH_P;
+        if (t1 && copy1RevealedRef.current) {
+          t1.style.transition = `opacity ${FOCUS_DIM_MS}ms ease`;
+          t1.style.opacity = copy1Active ? "1" : `${FOCUS_DIM_OPACITY}`;
+        }
+        if (t2 && copy2RevealedRef.current) {
+          t2.style.transition = `opacity ${FOCUS_DIM_MS}ms ease`;
+          t2.style.opacity = copy1Active ? `${FOCUS_DIM_OPACITY}` : "1";
         }
       }
     }
@@ -418,15 +425,10 @@ export function PartnershipSection() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", update);
-
-    const copy1RO = new ResizeObserver(update);
-    copy1RO.observe(copy1);
-    const copy2RO = new ResizeObserver(update);
-    copy2RO.observe(copy2);
-    // See this component's own doc comment: this section being the LAST
-    // one on the page means the document's own height can change (more
-    // sections added below later) in a way that changes maxScrollY/the
-    // clamp above, independent of this section's own layout.
+    // Document height changes (more sections added below, images/fonts
+    // loading further down the page) change `maxScrollY` and therefore
+    // the b3 clamp — re-measure whenever that happens, not just on
+    // viewport resize (same precedent as UspDividerDot).
     const bodyRO = new ResizeObserver(update);
     bodyRO.observe(document.body);
 
@@ -434,124 +436,167 @@ export function PartnershipSection() {
       cancelAnimationFrame(raf);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", update);
-      copy1RO.disconnect();
-      copy2RO.disconnect();
       bodyRO.disconnect();
     };
   }, [reducedMotion, inView]);
 
-  const copyTextStyle = (maxWidth: number): CSSProperties => ({
-    color: "var(--fig-color-neutral-900)",
-    fontSize: "20px",
-    lineHeight: "30px",
-    margin: 0,
-    maxWidth,
-  });
-
   return (
     <section
-      ref={wrapperRef}
-      className="relative w-full"
-      style={{
-        background: "linear-gradient(180deg, var(--fig-color-brand-50) 0%, #FFFFFF 100%)",
-        paddingTop: VERTICAL_INSET,
-        paddingBottom: VERTICAL_INSET,
-      }}
+      ref={sectionRef}
       aria-label="Partnership"
+      className="relative w-full"
+      style={{ background: "linear-gradient(180deg, var(--fig-color-brand-50) 0%, #FFFFFF 100%)" }}
     >
       <div
-        className="mx-auto flex flex-col items-start lg:flex-row lg:items-stretch"
+        className="mx-auto"
         style={{
           width: `calc(100% - 2 * ${SIDE_INSET})`,
           maxWidth: CONTENT_MAX_WIDTH_PX,
-          gap: COLUMN_GAP,
+          paddingTop: VERTICAL_INSET,
+          paddingBottom: VERTICAL_INSET,
           fontFamily: "var(--font-hanken-grotesk)",
         }}
       >
-        {/* Left column — heading/badge, then both copy blocks in normal flow */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div ref={headingRowRef} className="flex items-start justify-between gap-6">
-            <h2
-              className="font-normal"
-              style={{
-                color: "var(--fig-color-neutral-900)",
-                fontSize: "clamp(26px, 2.9vw, 42px)",
-                lineHeight: 1.05,
-                margin: 0,
-              }}
-            >
-              Global technology.
-              <br />
-              Local people who make it work.
-            </h2>
-            <SectionBadge label="Partnership" />
-          </div>
-
-          <p
-            ref={copy1Ref}
+        {/* Badge + heading row */}
+        <div ref={headingWrapRef} className="flex items-start justify-between gap-6">
+          <h2
             className="font-normal"
-            style={{ ...copyTextStyle(COPY1_MAX_WIDTH_PX), marginTop: HEADING_TO_COPY1_GAP }}
+            style={{
+              color: "var(--fig-color-neutral-900)",
+              fontSize: "clamp(26px, 2.9vw, 42px)",
+              lineHeight: 1.05,
+              margin: 0,
+            }}
           >
-            <span ref={copy1RevealRef} style={{ display: "inline-block" }}>
-              {ENABLE_FOCUS_DIM ? (
-                <span ref={copy1DimRef} style={{ transition: `opacity ${FOCUS_DIM_DURATION_MS}ms ease` }}>
-                  {COPY.geotab}
-                </span>
-              ) : (
-                COPY.geotab
-              )}
-            </span>
-          </p>
-
-          <p
-            ref={copy2Ref}
-            className="font-normal"
-            style={{ ...copyTextStyle(COPY2_MAX_WIDTH_PX), marginTop: reducedMotion ? HEADING_TO_COPY1_GAP : `${COPY_GAP_VH}vh` }}
-          >
-            <span ref={copy2RevealRef} style={{ display: "inline-block" }}>
-              {ENABLE_FOCUS_DIM ? (
-                <span ref={copy2DimRef} style={{ transition: `opacity ${FOCUS_DIM_DURATION_MS}ms ease` }}>
-                  {COPY.feizm}
-                </span>
-              ) : (
-                COPY.feizm
-              )}
-            </span>
-          </p>
-
-          {/* See BOTTOM_SPACER_VH's own comment — this has to live INSIDE
-              the left column (not as section padding outside the row):
-              the right column's sticky travel range comes from the ROW's
-              own stretched height, which in turn comes from the LEFT
-              column's content height, so only extra height actually
-              inside this column pushes the sticky release point later. */}
-          {!reducedMotion && <div aria-hidden style={{ height: `${BOTTOM_SPACER_VH}vh` }} />}
+            Global technology.
+            <br />
+            Local people who make it work.
+          </h2>
+          <SectionBadge label="Partnership" />
         </div>
 
-        {/* Right column — device only. No explicit height: the flex
-            row's default `align-items: stretch` makes this div match the
-            left column's full (much taller) height, which is what lets
-            the sticky box inside it stick through both copy phases and
-            release cleanly at the row's own bottom. */}
-        <div className="relative w-full shrink-0" style={{ width: isDesktop ? RIGHT_COLUMN_WIDTH : "min(70vw, 380px)" }}>
-          <div
-            className="flex items-center justify-center"
-            style={
-              reducedMotion || !isDesktop
-                ? undefined
-                : { position: "sticky", top: "var(--header-h)", height: "calc(100svh - var(--header-h))" }
-            }
-          >
+        {reducedMotion ? (
+          <div className="mt-16 flex flex-col items-center gap-10 lg:flex-row lg:items-start">
+            <div className="flex min-w-0 flex-col gap-8" style={{ maxWidth: COPY_MAX_WIDTH_PX, width: "100%" }}>
+              <p
+                className="font-normal"
+                style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
+              >
+                {COPY.geotab}
+              </p>
+              <p
+                className="font-normal"
+                style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
+              >
+                {COPY.feizm}
+              </p>
+            </div>
             <ScrollFrameSequence
-              ref={deviceRef}
               frameUrls={DEVICE_FRAME_URLS}
               fallbackSrc={DEVICE_FALLBACK_SRC}
               alt="Telematics device"
-              reducedMotion={reducedMotion}
-              style={{ width: "100%", maxWidth: 624, maxHeight: 624, aspectRatio: "1 / 1" }}
+              reducedMotion
+              style={{ width: "min(60vw, 420px)", aspectRatio: "1 / 1", flexShrink: 0 }}
             />
           </div>
-        </div>
+        ) : isDesktop ? (
+          <div className="mt-16 flex" style={{ gap: 120 }}>
+            {/* LEFT column — copy in normal document flow */}
+            <div className="shrink-0" style={{ width: `min(100%, ${COPY_MAX_WIDTH_PX}px)` }}>
+              <div ref={copy1WrapRef}>
+                <p
+                  ref={copy1TextRef}
+                  className="font-normal"
+                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
+                >
+                  {COPY.geotab}
+                </p>
+              </div>
+              <div aria-hidden style={{ height: `${COPY_GAP_VH}vh` }} />
+              <div ref={copy2WrapRef}>
+                <p
+                  ref={copy2TextRef}
+                  className="font-normal"
+                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
+                >
+                  {COPY.feizm}
+                </p>
+              </div>
+            </div>
+
+            {/* RIGHT column — stretched by the flex row's own default
+                align-items:stretch to match the LEFT column's height;
+                the sticky box inside it is what actually stays put. */}
+            <div className="relative min-w-0 flex-1">
+              <div
+                className="flex items-center justify-center"
+                style={{ position: "sticky", top: "var(--header-h)", height: "calc(100svh - var(--header-h))" }}
+              >
+                <ScrollFrameSequence
+                  ref={deviceRef}
+                  frameUrls={DEVICE_FRAME_URLS}
+                  fallbackSrc={DEVICE_FALLBACK_SRC}
+                  alt="Telematics device"
+                  style={{ width: "min(624px, 90%)", aspectRatio: "1 / 1" }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-10 flex flex-col">
+            {/* Device — sticky near the top of the screen (not a full-
+                height column like desktop); the copy below it is what
+                gives this box room to actually stick, same principle as
+                the desktop right column just rotated 90°. */}
+            <div
+              className="relative z-10 flex items-center justify-center"
+              style={{
+                position: "sticky",
+                top: "var(--header-h)",
+                height: `${MOBILE_DEVICE_VH}vh`,
+                // Opaque, not the section's own gradient: this box sticks
+                // at a fixed viewport position while the gradient (tied to
+                // the section's own scroll position) moves underneath it,
+                // so reusing the gradient here would visibly seam against
+                // the real one. A flat near-white tone (close to the
+                // gradient's own end stop) reads fine at any scroll depth
+                // without needing to track the section's scroll position
+                // just to color this box.
+                backgroundColor: "#FFFBF8",
+              }}
+            >
+              <ScrollFrameSequence
+                ref={deviceRef}
+                frameUrls={DEVICE_FRAME_URLS}
+                fallbackSrc={DEVICE_FALLBACK_SRC}
+                alt="Telematics device"
+                style={{ height: "85%", aspectRatio: "1 / 1", maxWidth: "85vw" }}
+              />
+            </div>
+
+            <div className="mt-8 flex flex-col">
+              <div ref={copy1WrapRef}>
+                <p
+                  ref={copy1TextRef}
+                  className="font-normal"
+                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "18px", lineHeight: "28px", margin: 0 }}
+                >
+                  {COPY.geotab}
+                </p>
+              </div>
+              <div aria-hidden style={{ height: `${COPY_GAP_VH}vh` }} />
+              <div ref={copy2WrapRef}>
+                <p
+                  ref={copy2TextRef}
+                  className="font-normal"
+                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "18px", lineHeight: "28px", margin: 0 }}
+                >
+                  {COPY.feizm}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

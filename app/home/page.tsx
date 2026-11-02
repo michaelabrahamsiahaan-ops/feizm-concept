@@ -43,15 +43,15 @@ import { SmoothScroll } from "@/components/shared/smooth-scroll";
  * scroll-linked animation, no pin, nothing that needs coordinating with
  * the sections above it.
  *
- * PartnershipSection ("Home / 05 Partnership") is pinned, same mechanism
- * as StatsSection, and is the LAST section on the page — no Footer here
- * yet (confirmed: not in Figma as a `Home /` frame, unlike the About
- * page). Per StatsSection's own doc comment, a pinned section being the
- * last thing on the page needs the viewport to be at least its own pin
- * height tall for the sticky release to complete cleanly; verified at
- * 1440x900/1280x720/1920x1080 in Step 3 (see that component's own doc
- * comment for the pin geometry and why this section's device illustration
- * isn't literally what Figma shows).
+ * PartnershipSection ("Home / 05 Partnership") is NOT pinned at the
+ * section level (an earlier build pinned the whole section and crossfaded
+ * two copy blocks at one spot — replaced, see git history and that
+ * component's own doc comment) — only its device illustration is
+ * `position: sticky`, joinsystems.co-style, while its copy scrolls past
+ * normally on the left. It's also the LAST section on the page — no
+ * Footer here yet (confirmed: not in Figma as a `Home /` frame, unlike
+ * the About page) — which matters for that component's own
+ * scroll-breakpoint clamp (see its doc comment for why).
  */
 export default function HomePage() {
   return (
