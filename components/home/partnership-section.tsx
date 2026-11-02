@@ -23,25 +23,46 @@ const CONTENT_MAX_WIDTH_PX = 1600; // matches StatsSection's own CARD_MAX_WIDTH_
 // sharing one width instead of Figma's two slightly different ones.
 const COPY_MAX_WIDTH_PX = 616;
 
-// ---- Vertical scroll distance between the two copy blocks (named per
-// the brief, which explicitly invited adjusting it: "adjust if Figma's
-// spacing suggests otherwise"). Figma has no equivalent value to read
-// here (this scrolling structure doesn't exist in Figma at all — see
-// this component's own doc comment), so 80 was a starting guess that
-// turned out too small: the right column's total height (both copy
-// blocks + this gap) must be MEANINGFULLY taller than the sticky
-// device's own box, or there's no real room for `position: sticky` to
-// visibly hold — at 80vh the two were within ~15px of each other, which
-// technically still satisfies the CSS spec (confirmed directly: it does
-// stick, briefly) but reads as "doesn't stick at all" to a scrolling user
-// and even an automated headless Chromium check (separately confirmed:
-// headless Chromium's own position:sticky implementation glitches and
-// never visibly catches at all when the margin is this tight, where a
-// real Chromium window does — see this component's own Step-3 notes).
-// 130 gives the box several hundred px of genuine, clearly visible stuck
-// room while keeping the section meaningfully shorter than the old
-// full-section-pin build (verified).
-const COPY_GAP_VH = 130;
+// ---- Vertical scroll distances around/between the two copy blocks
+// (named per the brief, which explicitly invited adjusting these: "adjust
+// if Figma's spacing suggests otherwise"). Figma has no equivalent values
+// to read here (this scrolling structure doesn't exist in Figma at all —
+// see this component's own doc comment). Three separate constants, not
+// one, because they fix three different problems:
+//   - LEAD_IN_VH (before copy 1): without this, copy 1 starts at the
+//     exact same scroll position as the device's own sticky column (both
+//     begin at the row's top), so by the time the device has scrolled up
+//     enough to actually STICK, copy 1 has ALREADY scrolled most of the
+//     way past — confirmed directly, this is exactly why the rotation
+//     used to visibly happen off-screen before the device ever caught.
+//     Giving copy 1 a head start (sitting further down the row) means the
+//     device reaches its stuck position around the same time copy 1 is
+//     still comfortably low in the viewport, not already leaving.
+//     `(0.75 * viewport height) - header height` is the target (copy 1's
+//     own "75% down the viewport" entrance should line up with the
+//     moment the device sticks); 65vh approximates that at a 900px-tall
+//     viewport without hard-coding a px value that wouldn't scale. The
+//     progress math below also takes `max(stick point, copy-1-at-75%)`
+//     as a safety net, so small imprecision here never lets rotation
+//     start before the device is genuinely stuck.
+//   - COPY_GAP_VH (between copy 1 and copy 2): was 130, which left an
+//     all-device, no-copy gap on screen for a wide stretch of scroll
+//     (confirmed: copy 1 fully gone, copy 2 still ~1140px below, nothing
+//     but the device on screen) — shrunk to 45 so copy 2 starts entering
+//     from the bottom before copy 1 has fully left the top (verified: see
+//     this component's own Step-3 notes for the exact visible-range math).
+//   - TRAIL_VH (after copy 2): new. This section is still the LAST thing
+//     on the page, so without deliberate room after copy 2, the document
+//     simply ends before copy 2 can reach its own "settled" position —
+//     scrolling stops with copy 2 stuck low in the viewport and the
+//     device never gets to hold its final lit state before releasing.
+//     50vh gives copy 2 room to reach that position AND gives the device
+//     a short hold afterward before it releases — real document height,
+//     not just the scroll-clamp safety net (which still exists below for
+//     belt-and-braces, but this is the actual fix).
+const LEAD_IN_VH = 65;
+const COPY_GAP_VH = 45;
+const TRAIL_VH = 50;
 
 // ---- Mobile (<1024px) sticky device height — confirmed with the user
 // (AskUserQuestion) before building: device sticky near the top at
@@ -64,13 +85,20 @@ const DEVICE_FRAME_URLS = Array.from(
 );
 const DEVICE_FALLBACK_SRC = "/illustrations/device/device-final-lit.webp";
 
-// ---- Device progress breakpoints, expressed as p (0..1) at four named
-// phases of SCROLL POSITION (not of the frame index) — see this
-// component's own doc comment for how scroll position maps to these. ----
-const P_COPY1_START = 0;
-const P_COPY1_CENTER = 0.7;
+// ---- Device progress (p) phases ----
+const P_START = 0;
+const P_COPY1_DONE = 0.7;
 const P_COPY2_START = 0.8;
-const P_COPY2_CENTER = 1;
+const P_COPY2_DONE = 1;
+
+// Viewport-height fractions that drive the breakpoints — "copy 1 travels
+// from ~75% to ~35% of the viewport height" etc, per the brief. Applied
+// to each copy wrapper's own TOP edge (not its center), consistently for
+// both copy blocks.
+const COPY1_ENTER_FRAC = 0.75;
+const COPY1_SETTLE_FRAC = 0.35;
+const COPY2_ENTER_FRAC = 0.75;
+const COPY2_SETTLE_FRAC = 0.45;
 
 // ---- Reveal ("rises in once", joinsystems.co-style) ----
 const REVEAL_TRANSLATE_PX = 40;
@@ -90,10 +118,18 @@ const FOCUS_DIM_OPACITY = 0.35;
 const FOCUS_DIM_MS = 300;
 // Switches at the midpoint of the 0.70->0.80 "between copies" gap — the
 // one p value with no better claim to either copy block.
-const FOCUS_DIM_SWITCH_P = (P_COPY1_CENTER + P_COPY2_START) / 2;
+const FOCUS_DIM_SWITCH_P = (P_COPY1_DONE + P_COPY2_START) / 2;
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+// Same live measurement StatsSection/SiteHeader/ScrollLink all use for
+// the header's own rendered height.
+function headerHeightPx(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--header-h");
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 
 const COPY = {
@@ -106,37 +142,51 @@ const COPY = {
  * `REVEAL_TRANSLATE_PX`) and animates to visible the first time `wrapper`
  * crosses `REVEAL_ROOT_MARGIN`'s threshold, then disconnects — it never
  * re-hides on scroll back up. If `wrapper` has ALREADY crossed that
- * threshold at setup time (page loaded mid-section, or landed via an
- * anchor link), it's shown immediately with `transition: none`, per the
- * brief ("show it immediately without animating") — this is a
- * synchronous check done BEFORE the IntersectionObserver is even
- * attached, not a race against its first callback.
+ * threshold by the time observation starts (page loaded mid-section, or
+ * landed via an anchor link), it's shown immediately with `transition:
+ * none`, per the brief ("show it immediately without animating").
+ *
+ * That "already past" case is decided from the IntersectionObserver's
+ * OWN first callback (`isFirstCallback` below), NOT a synchronous
+ * `getBoundingClientRect()` check made before the observer is even
+ * attached — an earlier version did exactly that and had a confirmed
+ * bug: `useLayoutEffect` runs essentially as soon as this component
+ * mounts, which can be BEFORE other, heavier components earlier on the
+ * page (the hero parallax, in particular) finish their own async height
+ * adjustments. At that moment the document can still be far shorter than
+ * its settled height, so a synchronous check read the wrapper as "close
+ * to the top of a short page" and revealed it immediately — even though,
+ * once the page finished settling a few hundred ms later, the wrapper's
+ * true position was thousands of px below the viewport. Confirmed
+ * directly: this is exactly why copy 2 was showing at opacity 1 while
+ * still ~1100px off-screen. An IntersectionObserver callback is always
+ * computed against current, stable layout (the browser schedules it
+ * after layout settles, not synchronously inside the effect that created
+ * it), so deciding from its first callback instead has no equivalent
+ * failure mode — it cannot fire against a layout that hasn't settled yet
+ * the way a same-tick synchronous read can.
  *
  * `wrapper` and `text` are separate elements (not always the same node):
- * `wrapper` is what gets measured/observed (a plain, never-transformed
- * box), `text` is what actually receives the opacity/transform styles.
+ * `wrapper` is what gets observed (a plain, never-transformed box),
+ * `text` is what actually receives the opacity/transform styles.
  * Splitting them matters for the copy blocks specifically — their
  * `wrapper` is also what the device-progress effect below measures for
  * scroll breakpoints, and measuring a node that's mid-translateY would
  * read a few px off from its true document position.
  */
 function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () => void): () => void {
-  const thresholdY = window.innerHeight * 0.85;
-  if (wrapper.getBoundingClientRect().top <= thresholdY) {
-    text.style.transition = "none";
-    text.style.opacity = "1";
-    text.style.transform = "translateY(0px)";
-    onRevealed?.();
-    return () => {};
-  }
-
   text.style.opacity = "0";
   text.style.transform = `translateY(${REVEAL_TRANSLATE_PX}px)`;
-  text.style.transition = `opacity ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}, transform ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}`;
 
+  let isFirstCallback = true;
   const io = new IntersectionObserver(
     (entries) => {
+      const wasFirstCallback = isFirstCallback;
+      isFirstCallback = false;
       if (!entries[0].isIntersecting) return;
+      text.style.transition = wasFirstCallback
+        ? "none"
+        : `opacity ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}, transform ${REVEAL_DURATION_MS}ms ${REVEAL_EASE}`;
       text.style.opacity = "1";
       text.style.transform = "translateY(0px)";
       onRevealed?.();
@@ -206,30 +256,41 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  * stuck room on desktop; `MOBILE_DEVICE_VH`'s much shorter box leaves
  * comparatively enormous slack by the same logic.
  *
- * ---- Device progress (p) — tied to copy position, not a pin formula ----
- * Each copy block's own ABSOLUTE document Y (measured once via its
- * `wrapper`'s `getBoundingClientRect() + window.scrollY`, not re-read on
- * every scroll tick) gives four scroll-position breakpoints:
- *   b0 = copy1CenterY - viewportH        (copy 1 at the viewport BOTTOM)
- *   b1 = copy1CenterY - viewportH / 2     (copy 1 at the viewport CENTER)
- *   b2 = copy2CenterY - viewportH        (copy 2 at the viewport BOTTOM)
- *   b3 = copy2CenterY - viewportH / 2     (copy 2 at the viewport CENTER)
- * `p` is piecewise-linear across them: b0->b1 maps to `P_COPY1_START ->
- * P_COPY1_CENTER` (0 -> 0.70), b1->b2 to 0.70 -> 0.80, b2->b3 to 0.80 ->
- * 1.00 — i.e. copy 1's own entrance drives the back-view-to-rotation
- * phase, the quiet gap between copies drives the settled/LEDs-off phase,
- * and copy 2's entrance drives the LED-lighting phase, exactly as asked.
+ * ---- Device progress (p) — tied to copy position AND the device's own
+ * stick point, not a pin formula ----
+ * Four scroll-position breakpoints, each measured once (via
+ * `getBoundingClientRect() + window.scrollY` on a plain, never-sticky,
+ * never-transformed wrapper — never re-read on every scroll tick):
+ *   b0 = max(deviceStickY, copy1TopY - 0.75*viewportH)
+ *   b1 = copy1TopY - 0.35*viewportH
+ *   b2 = copy2TopY - 0.75*viewportH
+ *   b3 = copy2TopY - 0.45*viewportH
+ * where `deviceStickY` is the scrollY at which the device's own sticky
+ * box first catches (`deviceColumnRef`'s own absolute top minus the
+ * header height — see `headerHeightPx()`). `p` is piecewise-linear:
+ * b0->b1 maps 0->0.70, b1->b2 maps 0.70->0.80, b2->b3 maps 0.80->1.00.
  *
- * `b3` (and, chained through it, b0-b2) is clamped against the document's
- * real max scrollY — same technique as `UspDividerDot`
- * (components/fleet/usp-divider-dot.tsx): this is currently the last
- * section on the page, so the "natural" b3 (copy 2 truly centered) can
- * sit past what the page can physically scroll to. Without the clamp, p
- * would get stuck short of 1 forever once the user hits the document's
- * real bottom. A `ResizeObserver` on `document.body` re-measures whenever
- * the document's total height changes (more sections added below later),
- * so the clamp automatically stops mattering once there's real content
- * after this section providing the scroll room on its own.
+ * The `max()` in b0 is the fix for a real, confirmed bug in an earlier
+ * build: copy 1 and the device both start at the SAME scroll position
+ * (the row's own top), so by the time the device had scrolled up enough
+ * to actually stick, copy 1 had already scrolled most of the way past —
+ * the whole rotation played out off-screen, stuck looking nearly done by
+ * the time the device caught. `LEAD_IN_VH` (above) gives copy 1 a head
+ * start so the two moments land close together on their own, and the
+ * `max()` is the hard guarantee underneath that: p cannot leave 0 until
+ * the device has GENUINELY caught, no matter how viewport height or
+ * content changes shift the lead-in's exact alignment.
+ *
+ * `b3` (and, chained through it, b0-b2) is ALSO clamped against the
+ * document's real max scrollY — same technique as `UspDividerDot`
+ * (components/fleet/usp-divider-dot.tsx) — as a safety net on top of
+ * `TRAIL_VH`'s real document space, not a replacement for it: this is
+ * still the last section on the page, and the clamp is what keeps p
+ * reaching exactly 1 even on a viewport/content combination where
+ * `TRAIL_VH` isn't quite enough. A `ResizeObserver` on `document.body`
+ * re-measures whenever the document's total height changes (more
+ * sections added below later), so the clamp stops mattering entirely
+ * once real content after this section provides the room on its own.
  *
  * `measure()` (breakpoints) and `paint()` (p + device draw, reads
  * `window.scrollY` only) are split the same way as `UspDividerDot` for
@@ -270,7 +331,16 @@ export function PartnershipSection() {
   const copy1TextRef = useRef<HTMLParagraphElement | null>(null);
   const copy2WrapRef = useRef<HTMLDivElement | null>(null);
   const copy2TextRef = useRef<HTMLParagraphElement | null>(null);
+  // The sticky box's own DIRECT PARENT (never itself sticky, so its
+  // getBoundingClientRect() is always reliable regardless of the child's
+  // current stuck/unstuck state) — see this component's own doc comment
+  // for why `deviceStickY` is derived from this, not from the sticky
+  // element itself.
+  const deviceColumnRef = useRef<HTMLDivElement | null>(null);
   const deviceRef = useRef<ScrollFrameSequenceHandle | null>(null);
+  // Found once in measure() (not on every scroll tick) purely so paint()
+  // can stamp `data-progress` on it for QA — see paint()'s own comment.
+  const canvasElRef = useRef<HTMLElement | null>(null);
 
   const copy1RevealedRef = useRef(false);
   const copy2RevealedRef = useRef(false);
@@ -336,28 +406,50 @@ export function PartnershipSection() {
       );
     }
     return () => cleanups.forEach((fn) => fn());
-  }, [reducedMotion]);
+    // `isDesktop` is a dependency even though this effect never reads it
+    // directly: it decides which JSX branch (and therefore which actual
+    // DOM nodes `copy1WrapRef` etc. point to) is mounted. `isDesktop`
+    // defaults to `true` and is corrected to its real value shortly after
+    // mount (see its own matchMedia effect) — on an actual mobile
+    // viewport, that correction unmounts the desktop branch and mounts
+    // the mobile one, re-attaching every ref to BRAND NEW nodes. Without
+    // this dependency, this effect only ran once, against the ORIGINAL
+    // (desktop) nodes that no longer exist — confirmed directly: on
+    // mobile, the copy blocks sat at opacity 1 from the very first frame
+    // because `setupReveal` had never been called on the real, mounted
+    // paragraphs at all.
+  }, [reducedMotion, isDesktop]);
 
-  // ---- Device progress (p), tied to copy position — see this
-  // component's own doc comment for the full breakpoint math. ----
+  // ---- Device progress (p), tied to copy position AND the device's own
+  // stick point — see this component's own doc comment for the full
+  // breakpoint math. ----
   useLayoutEffect(() => {
     if (reducedMotion) return;
     const copy1 = copy1WrapRef.current;
     const copy2 = copy2WrapRef.current;
-    if (!copy1 || !copy2) return;
+    const deviceColumn = deviceColumnRef.current;
+    if (!copy1 || !copy2 || !deviceColumn) return;
+    // Re-query fresh on every effect restart (e.g. the isDesktop switch
+    // this effect's own dependency comment explains) — the previously
+    // found canvas may belong to a branch that just unmounted.
+    canvasElRef.current = null;
 
     function measure() {
       const viewportH = window.innerHeight;
+      const headerH = headerHeightPx();
       const r1 = copy1!.getBoundingClientRect();
       const r2 = copy2!.getBoundingClientRect();
-      const copy1CenterAbs = r1.top + window.scrollY + r1.height / 2;
-      const copy2CenterAbs = r2.top + window.scrollY + r2.height / 2;
+      const rDevice = deviceColumn!.getBoundingClientRect();
+      const copy1TopAbs = r1.top + window.scrollY;
+      const copy2TopAbs = r2.top + window.scrollY;
+      const deviceColumnTopAbs = rDevice.top + window.scrollY;
+      const deviceStickY = deviceColumnTopAbs - headerH;
       const maxScrollY = Math.max(0, document.documentElement.scrollHeight - viewportH);
 
-      const raw0 = copy1CenterAbs - viewportH;
-      const raw1 = copy1CenterAbs - viewportH / 2;
-      const raw2 = copy2CenterAbs - viewportH;
-      const raw3 = copy2CenterAbs - viewportH / 2;
+      const raw0 = Math.max(deviceStickY, copy1TopAbs - COPY1_ENTER_FRAC * viewportH);
+      const raw1 = copy1TopAbs - COPY1_SETTLE_FRAC * viewportH;
+      const raw2 = copy2TopAbs - COPY2_ENTER_FRAC * viewportH;
+      const raw3 = copy2TopAbs - COPY2_SETTLE_FRAC * viewportH;
 
       // Clamp monotonically against the document's real max scroll (see
       // this component's own doc comment — same technique as
@@ -372,6 +464,10 @@ export function PartnershipSection() {
       b1Ref.current = c1;
       b2Ref.current = c2;
       b3Ref.current = c3;
+
+      if (!canvasElRef.current) {
+        canvasElRef.current = deviceColumn!.querySelector('canvas[aria-label="Telematics device"]');
+      }
     }
 
     function progressFor(scrollY: number) {
@@ -379,16 +475,20 @@ export function PartnershipSection() {
       const b1 = b1Ref.current;
       const b2 = b2Ref.current;
       const b3 = b3Ref.current;
-      if (scrollY <= b0) return P_COPY1_START;
-      if (scrollY >= b3) return P_COPY2_CENTER;
-      if (scrollY <= b1) return lerp(P_COPY1_START, P_COPY1_CENTER, (scrollY - b0) / (b1 - b0));
-      if (scrollY <= b2) return lerp(P_COPY1_CENTER, P_COPY2_START, (scrollY - b1) / (b2 - b1));
-      return lerp(P_COPY2_START, P_COPY2_CENTER, (scrollY - b2) / (b3 - b2));
+      if (scrollY <= b0) return P_START;
+      if (scrollY >= b3) return P_COPY2_DONE;
+      if (scrollY <= b1) return lerp(P_START, P_COPY1_DONE, (scrollY - b0) / (b1 - b0));
+      if (scrollY <= b2) return lerp(P_COPY1_DONE, P_COPY2_START, (scrollY - b1) / (b2 - b1));
+      return lerp(P_COPY2_START, P_COPY2_DONE, (scrollY - b2) / (b3 - b2));
     }
 
     function paint() {
       const p = progressFor(window.scrollY);
       deviceRef.current?.setProgress(p);
+      // Exposed for QA/verification only (e.g. `canvas.dataset.progress`
+      // from a console or test script) — harmless in production, not
+      // read by any other code in this component.
+      if (canvasElRef.current) canvasElRef.current.dataset.progress = p.toFixed(4);
 
       if (ENABLE_FOCUS_DIM) {
         const t1 = copy1TextRef.current;
@@ -438,7 +538,10 @@ export function PartnershipSection() {
       window.removeEventListener("resize", update);
       bodyRO.disconnect();
     };
-  }, [reducedMotion, inView]);
+    // `isDesktop` is a dependency for the same reason as the reveal
+    // effect's own (see its comment) — it decides which DOM nodes
+    // `copy1WrapRef`/`copy2WrapRef`/`deviceColumnRef` actually point to.
+  }, [reducedMotion, isDesktop, inView]);
 
   return (
     <section
@@ -503,6 +606,7 @@ export function PartnershipSection() {
           <div className="mt-16 flex" style={{ gap: 120 }}>
             {/* LEFT column — copy in normal document flow */}
             <div className="shrink-0" style={{ width: `min(100%, ${COPY_MAX_WIDTH_PX}px)` }}>
+              <div aria-hidden style={{ height: `${LEAD_IN_VH}vh` }} />
               <div ref={copy1WrapRef}>
                 <p
                   ref={copy1TextRef}
@@ -522,16 +626,21 @@ export function PartnershipSection() {
                   {COPY.feizm}
                 </p>
               </div>
+              <div aria-hidden style={{ height: `${TRAIL_VH}vh` }} />
             </div>
 
             {/* RIGHT column — stretched by the flex row's own default
                 align-items:stretch to match the LEFT column's height;
-                the sticky box inside it is what actually stays put. */}
-            <div className="relative min-w-0 flex-1">
-              <div
-                className="flex items-center justify-center"
-                style={{ position: "sticky", top: "var(--header-h)", height: "calc(100svh - var(--header-h))" }}
-              >
+                the sticky box inside it is what actually stays put. Sized
+                to the DEVICE itself (not a full `100svh - header` box) —
+                a full-viewport-tall sticky box leaves no slack below it,
+                which was separately confirmed to force an early release
+                (the box's own bottom edge hits the viewport's bottom
+                edge, and from that instant there's no more row height
+                left for it to stay stuck in) well before copy 2 could
+                reach its settled position. */}
+            <div ref={deviceColumnRef} className="relative min-w-0 flex-1">
+              <div style={{ position: "sticky", top: "var(--header-h)" }}>
                 <ScrollFrameSequence
                   ref={deviceRef}
                   frameUrls={DEVICE_FRAME_URLS}
@@ -543,11 +652,20 @@ export function PartnershipSection() {
             </div>
           </div>
         ) : (
-          <div className="mt-10 flex flex-col">
+          // `deviceColumnRef` goes on THIS outer wrapper, not a wrapper
+          // around just the sticky box — the sticky box's real CSS
+          // containing block (and therefore its actual stick-range) is
+          // its own PARENT's content box, which is this whole column
+          // (device + copy area together), not an isolated box around
+          // just the device. Wrapping only the device here would leave
+          // the sticky box with zero taller container to roam in and
+          // silently kill the stick effect — confirmed directly when
+          // first tried this way (see git history of this file).
+          <div ref={deviceColumnRef} className="mt-10 flex flex-col">
             {/* Device — sticky near the top of the screen (not a full-
-                height column like desktop); the copy below it is what
-                gives this box room to actually stick, same principle as
-                the desktop right column just rotated 90°. */}
+                height box like desktop); the copy below it is what gives
+                this room to actually stick, same principle as the
+                desktop right column just rotated 90°. */}
             <div
               className="relative z-10 flex items-center justify-center"
               style={{
@@ -575,6 +693,7 @@ export function PartnershipSection() {
             </div>
 
             <div className="mt-8 flex flex-col">
+              <div aria-hidden style={{ height: `${LEAD_IN_VH}vh` }} />
               <div ref={copy1WrapRef}>
                 <p
                   ref={copy1TextRef}
@@ -594,6 +713,7 @@ export function PartnershipSection() {
                   {COPY.feizm}
                 </p>
               </div>
+              <div aria-hidden style={{ height: `${TRAIL_VH}vh` }} />
             </div>
           </div>
         )}
