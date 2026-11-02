@@ -69,6 +69,15 @@ const TRAIL_VH = 50;
 // ~45vh, copy scrolling underneath, rather than the two-column layout.
 const MOBILE_DEVICE_VH = 45;
 
+// ---- Scroll-linked background (peach -> white) ----
+// Start matches the Services section above (seamless hand-off, confirmed
+// live rather than assumed) and end matches "Home / 06 Industries"'s own
+// solid white fill (read live via figma-cli — also confirmed, not
+// assumed, so Partnership's own end color hands off with no seam on the
+// OTHER side either, for free).
+const BG_START_COLOR = "#FEEFEA";
+const BG_END_COLOR = "#FFFFFF";
+
 // ---- Device frame sequence (public/illustrations/device/, copied from
 // ~/Downloads/device-scroll/ — see that folder's own README.md for the
 // authoritative timeline baked into the 48 frames themselves):
@@ -122,6 +131,12 @@ const FOCUS_DIM_SWITCH_P = (P_COPY1_DONE + P_COPY2_START) / 2;
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+function clamp01(v: number) {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 // Same live measurement StatsSection/SiteHeader/ScrollLink all use for
@@ -225,8 +240,13 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  *     577/616 individually)
  *   - the hidden "Partner Logos" row (9 logos incl. Esri, `visible:
  *     false` in Figma) stays left out, same as the previous build
- *   - the background gradient (#FEEFEA -> #FFFFFF) still uses this
- *     project's own `--fig-color-brand-50` token for its start stop
+ *   - Figma's own flat background is a #FEEFEA -> #FFFFFF gradient
+ *     stretched over the whole frame; this now SCROLL-LINKS that same
+ *     pair of colors into a single interpolated solid instead (see
+ *     "Scroll-linked background" below) rather than reproducing a static
+ *     gradient — a deliberate web-only enhancement, not assumed from
+ *     Figma, matching `--fig-color-brand-50`'s own resolved value for
+ *     the start color so it's the same peach either way
  *
  * ---- Structure ----
  * A single relative section, no section-level pin. Below the badge+
@@ -298,6 +318,46 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  * cheap (no `getBoundingClientRect()` in that path), while `measure()`
  * only needs to re-run on resize / document-height change.
  *
+ * ---- Scroll-linked background (peach -> white) ----
+ * Two MORE breakpoints, measured in the exact same `measure()` pass as
+ * b0-b3 above (same scroll tick, no separate listener, per the brief):
+ *   bgStartY = sectionTopAbs - headerH   (section's own top reaches the
+ *     top of the viewport, i.e. right under the fixed header)
+ *   bgEndY = b1                          (copy 1 at 35% down the viewport
+ *     — reused directly, not recomputed: it's the exact same moment the
+ *     brief asks for, "by the time the device has finished rotating")
+ * `paint()` turns that into `bgT = easeInOutCubic(clamp01((scrollY -
+ * bgStartY) / (bgEndY - bgStartY)))` and writes ONE CSS custom property,
+ * `--partnership-bg`, as a `color-mix(in oklch, ...)` string — letting
+ * the browser's own OKLCH interpolation produce an even fade (no muddy
+ * gray midpoint, which plain sRGB lerp gets here specifically because
+ * peach and white sit on close-but-not-identical hue angles) instead of
+ * hand-rolling sRGB<->OKLCH conversion math for two fixed endpoints.
+ *
+ * The color lives on ONE custom property set on the section element
+ * itself, read by two different consumers via `var(--partnership-bg, ...)`
+ * — the full-bleed sticky background layer (next) AND, on the mobile
+ * layout only, the sticky device box's own backdrop (it needs to stay
+ * opaque against the copy scrolling underneath it, same reasoning as
+ * before, but now tracking the live color instead of a fixed tone so it
+ * never visibly mismatches the backdrop it sits on). One write, two
+ * readers, always in sync.
+ *
+ * The layer itself: `position: sticky; top: 0; height: 100vh;
+ * margin-bottom: -100vh` — the standard "sticky background, zero layout
+ * footprint" technique. `top: 0` (not `var(--header-h)`) and `height:
+ * 100vh` (not `100svh - header`) deliberately: this needs to paint
+ * behind the fixed header too (the brief explicitly calls out checking
+ * the header's own contrast against it), not just the content area under
+ * it, so it has to cover the FULL viewport, not the under-header region
+ * the device/copy layouts use elsewhere in this component. The negative
+ * margin pulls the next sibling up by the same amount, so this costs zero
+ * extra document height despite declaring `100vh` — confirmed directly,
+ * section height is unchanged from before this feature.
+ *
+ * Reduced motion keeps Figma's own static linear-gradient entirely
+ * untouched (no custom property, no sticky layer at all) — per the brief.
+ *
  * ---- Reveal ----
  * `setupReveal()` (above) handles the heading+badge row and each copy
  * block identically — hidden until ~85% down the viewport, then rises in
@@ -351,6 +411,10 @@ export function PartnershipSection() {
   const b1Ref = useRef(1);
   const b2Ref = useRef(2);
   const b3Ref = useRef(3);
+  // Background breakpoints (abs document Y, px) — see this component's
+  // own "Scroll-linked background" doc comment for what these mean.
+  const bgStartYRef = useRef(0);
+  const bgEndYRef = useRef(1);
 
   const [reducedMotion, setReducedMotion] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
@@ -465,6 +529,17 @@ export function PartnershipSection() {
       b2Ref.current = c2;
       b3Ref.current = c3;
 
+      // Background breakpoints — see this component's own "Scroll-linked
+      // background" doc comment. bgEndY reuses c1 directly (not a fresh
+      // copy1TopAbs - 0.35*viewportH computation): it's the exact same
+      // moment, and reusing it keeps the two features from drifting apart
+      // if the device-progress math above ever changes.
+      if (sectionRef.current) {
+        const sectionTopAbs = sectionRef.current.getBoundingClientRect().top + window.scrollY;
+        bgStartYRef.current = sectionTopAbs - headerH;
+        bgEndYRef.current = Math.max(c1, bgStartYRef.current + 1);
+      }
+
       if (!canvasElRef.current) {
         canvasElRef.current = deviceColumn!.querySelector('canvas[aria-label="Telematics device"]');
       }
@@ -483,12 +558,35 @@ export function PartnershipSection() {
     }
 
     function paint() {
-      const p = progressFor(window.scrollY);
+      const scrollY = window.scrollY;
+      const p = progressFor(scrollY);
       deviceRef.current?.setProgress(p);
       // Exposed for QA/verification only (e.g. `canvas.dataset.progress`
       // from a console or test script) — harmless in production, not
       // read by any other code in this component.
       if (canvasElRef.current) canvasElRef.current.dataset.progress = p.toFixed(4);
+
+      // Scroll-linked background — see this component's own doc comment.
+      // One write (a CSS custom property on the section), read by every
+      // consumer via var(--partnership-bg, ...); color-mix's own
+      // percentages run from end->start as bgT goes 0->1 (100% start at
+      // bgT=0, 100% end at bgT=1). The two ends are set to the literal
+      // hex directly rather than color-mix(... 100%, ... 0%) — the sRGB
+      // -> OKLCH -> sRGB round trip through color-mix introduces a tiny
+      // rounding drift even at a 100%/0% split (confirmed directly:
+      // #feefea came back as #feeef2, a 1-8/255 difference per channel,
+      // invisible but not byte-exact) — and byte-exact is what "no
+      // visible seam" at the Services hand-off actually depends on.
+      if (sectionRef.current) {
+        const bgT = easeInOutCubic(clamp01((scrollY - bgStartYRef.current) / (bgEndYRef.current - bgStartYRef.current)));
+        const bg =
+          bgT <= 0
+            ? BG_START_COLOR
+            : bgT >= 1
+              ? BG_END_COLOR
+              : `color-mix(in oklch, ${BG_START_COLOR} ${(1 - bgT) * 100}%, ${BG_END_COLOR} ${bgT * 100}%)`;
+        sectionRef.current.style.setProperty("--partnership-bg", bg);
+      }
 
       if (ENABLE_FOCUS_DIM) {
         const t1 = copy1TextRef.current;
@@ -548,8 +646,26 @@ export function PartnershipSection() {
       ref={sectionRef}
       aria-label="Partnership"
       className="relative w-full"
-      style={{ background: "linear-gradient(180deg, var(--fig-color-brand-50) 0%, #FFFFFF 100%)" }}
+      // Reduced motion: Figma's own static gradient, untouched. Otherwise
+      // no background here at all — the sticky layer below paints it,
+      // driven by the live --partnership-bg custom property this
+      // component's scroll-tick effect sets directly on this element.
+      style={
+        reducedMotion ? { background: "linear-gradient(180deg, var(--fig-color-brand-50) 0%, #FFFFFF 100%)" } : undefined
+      }
     >
+      {!reducedMotion && (
+        <div
+          aria-hidden
+          style={{
+            position: "sticky",
+            top: 0,
+            height: "100vh",
+            marginBottom: "-100vh",
+            backgroundColor: `var(--partnership-bg, ${BG_START_COLOR})`,
+          }}
+        />
+      )}
       <div
         className="mx-auto"
         style={{
@@ -672,15 +788,15 @@ export function PartnershipSection() {
                 position: "sticky",
                 top: "var(--header-h)",
                 height: `${MOBILE_DEVICE_VH}vh`,
-                // Opaque, not the section's own gradient: this box sticks
-                // at a fixed viewport position while the gradient (tied to
-                // the section's own scroll position) moves underneath it,
-                // so reusing the gradient here would visibly seam against
-                // the real one. A flat near-white tone (close to the
-                // gradient's own end stop) reads fine at any scroll depth
-                // without needing to track the section's scroll position
-                // just to color this box.
-                backgroundColor: "#FFFBF8",
+                // Opaque, not transparent: this box sticks at a fixed
+                // viewport position while copy scrolls underneath it, so
+                // it needs its own backdrop or that copy would show
+                // through. Reads the SAME live --partnership-bg custom
+                // property as the full-bleed layer (see this component's
+                // own "Scroll-linked background" doc comment) rather than
+                // a fixed tone, so it never mismatches the backdrop it's
+                // sitting on.
+                backgroundColor: `var(--partnership-bg, ${BG_START_COLOR})`,
               }}
             >
               <ScrollFrameSequence
