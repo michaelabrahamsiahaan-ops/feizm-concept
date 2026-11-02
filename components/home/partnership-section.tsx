@@ -69,6 +69,27 @@ const TRAIL_VH = 50;
 // ~45vh, copy scrolling underneath, rather than the two-column layout.
 const MOBILE_DEVICE_VH = 45;
 
+// ---- Badge -> heading gap (desktop left column) ----
+// Checked every other section with a badge directly above a heading
+// before picking this: WhyFeizm uses `--fig-spacing-32` (32px),
+// AchievementSection uses `--fig-spacing-22` (22px), PeopleSection1 uses
+// a literal 45px — three different values, each read off that section's
+// OWN Figma frame, not one shared convention. Since there's no single
+// precedent to match, this uses the user's own fallback instruction: 24px
+// at the 1440 reference width, scaled fluidly the same way every other
+// spacing value in this component is (ratio-of-1440, clamped).
+const BADGE_HEADING_GAP = "clamp(16px, 1.667vw, 24px)";
+
+// ---- Desktop device vertical centering ----
+// The device's own rendered box (ScrollFrameSequence's canvas) must stay
+// fully visible — including its baked-in drop shadow and the bottom
+// mounting tab, both part of the same square frame image, not separate
+// elements — with at least this much clearance from the viewport's own
+// bottom edge while stuck. Applied symmetrically (see the centering
+// effect below), so it's really "visually centered in the space below
+// the header, with a floor on how close either edge gets."
+const DEVICE_BOTTOM_CLEARANCE_PX = 40;
+
 // ---- Scroll-linked background (peach -> white) ----
 // Start matches the Services section above (seamless hand-off, confirmed
 // live rather than assumed) and end matches "Home / 06 Industries"'s own
@@ -233,8 +254,16 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  *     section, cycling its 48-frame rotation via `ScrollFrameSequence`
  *     as the copy column scrolls past it
  *   - the badge ("Partnership", byte-identical styling to the existing
- *     `SectionBadge`) and heading ("Global technology.\nLocal people who
- *     make it work.", 42px/43px Hanken Grotesk) are reproduced as-is
+ *     `SectionBadge`) and heading ("Global technology\nLocal people who
+ *     make it work", 42px/43px Hanken Grotesk, no trailing periods per
+ *     the user's own copy edit) keep their own styling, but NOT Figma's
+ *     layout: Figma puts the badge top-right, same row as the heading.
+ *     This deliberately deviates from that (badge moved above the
+ *     heading, left-aligned, inside the LEFT column on desktop — see
+ *     "Structure" below for why) per the user's own request, confirmed
+ *     rather than assumed; Figma itself was NOT modified, so its frame
+ *     still shows the old top-right placement until someone updates it
+ *     there too
  *   - copy width uses a single shared 616px column (`COPY_MAX_WIDTH_PX`
  *     — see its own comment for why, given Figma's two text boxes are
  *     577/616 individually)
@@ -249,20 +278,43 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  *     the start color so it's the same peach either way
  *
  * ---- Structure ----
- * A single relative section, no section-level pin. Below the badge+
- * heading row, either (>=1024px) a two-column flex row or (<1024px) a
- * single stacked column — see "Below 1024px" further down:
+ * A single relative section, no section-level pin, either (>=1024px) a
+ * two-column flex row or (<1024px) a single stacked column — see "Below
+ * 1024px" further down. `headingBlock` (badge above heading, left-
+ * aligned, `BADGE_HEADING_GAP` between them) is one JSX value rendered in
+ * a DIFFERENT position per layout, not a fixed shared row above
+ * everything the way it used to be:
+ *   - Desktop: the FIRST thing in the LEFT column, followed by the
+ *     `LEAD_IN_VH` spacer, copy 1, etc. The RIGHT column (device) is now
+ *     a plain sibling of the left column with no heading row above it —
+ *     it starts level with the badge, not below the heading, which is
+ *     the actual fix for the complaint that started this: the right
+ *     column used to start BELOW the heading+badge row (badge was a
+ *     sibling of the heading, both outside/above the two-column split),
+ *     pushing the device down far enough that its bottom (shadow +
+ *     mounting tab) got cut off by the viewport. Moving the badge beside
+ *     the heading inside the left column, and making the two-column row
+ *     itself start where that combined block starts, removes that whole
+ *     extra row's height from the right column's starting position —
+ *     confirmed directly (see the centering effect below for exactly how
+ *     much this moved the device up).
+ *   - Reduced motion / mobile: still a plain sibling ABOVE the rest of
+ *     the content, same position as before — only its OWN internal
+ *     layout changed (badge above heading instead of beside it); neither
+ *     of these had the "device starts late" problem the desktop
+ *     restructure fixes, since neither puts the device in a column
+ *     that's a sibling of the heading row to begin with.
  *   - Copy: copy 1, a `COPY_GAP_VH` spacer, copy 2 — all in normal
  *     document flow, real HTML text, reading order preserved.
- *   - Device: a `position: sticky` box that flex-centers the device
- *     inside it, sized/positioned so it reads as "stays in place" while
- *     the copy scrolls past (standard sticky-sidebar technique) until
- *     its own containing block's bottom edge approaches, at which point
- *     it releases and scrolls away with the rest of the section — no
- *     separate release logic, this falls out of `position: sticky` for
- *     free. On desktop that containing block is the RIGHT column, grown
- *     to match the LEFT column's height by the flex row's own default
- *     `align-items: stretch` (no JS height math needed for this part).
+ *   - Device: a `position: sticky` box, sized/positioned so it reads as
+ *     "stays in place" while the copy scrolls past (standard sticky-
+ *     sidebar technique) until its own containing block's bottom edge
+ *     approaches, at which point it releases and scrolls away with the
+ *     rest of the section — no separate release logic, this falls out of
+ *     `position: sticky` for free. On desktop that containing block is
+ *     the RIGHT column, grown to match the LEFT column's height by the
+ *     flex row's own default `align-items: stretch` (no JS height math
+ *     needed for this part).
  *
  * The device's own containing block needs to be MEANINGFULLY taller than
  * the sticky box itself for this to actually be visible (confirmed
@@ -275,6 +327,47 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  * `COPY_GAP_VH`'s own comment). 130 gives several hundred px of genuine
  * stuck room on desktop; `MOBILE_DEVICE_VH`'s much shorter box leaves
  * comparatively enormous slack by the same logic.
+ *
+ * ---- Desktop device centering (no cropping) ----
+ * The sticky box's OWN height, before this, was never actually measured
+ * against the viewport — `top: var(--header-h)` just pinned it directly
+ * under the header with no regard for whether the box (624px at its
+ * largest) plus the header height together exceeded a SHORT viewport,
+ * which is exactly how its bottom — the drop shadow and the mounting tab,
+ * both baked into the same square frame image, not separate elements —
+ * ended up clipped by the viewport's own bottom edge.
+ *
+ * Two independent fixes, not one:
+ *   - The device's own max size is now also capped by the viewport's
+ *     available height (`calc(100svh - var(--header-h) - 2 *
+ *     DEVICE_BOTTOM_CLEARANCE_PX)`, folded into the SAME `width`
+ *     min()` the 624px/90%-of-column caps already used — aspect-ratio
+ *     1:1 means a width cap is also a height cap here, so this needed no
+ *     separate max-height rule that could fight the aspect-ratio for the
+ *     non-constrained axis). On a short viewport, this SHRINKS the
+ *     device instead of letting it overflow.
+ *   - A small effect (`deviceBoxRef`, desktop only) measures the device's
+ *     own ACTUAL rendered size (via the same canvas element
+ *     `canvasElRef` already finds, not the sticky wrapper itself — that
+ *     wrapper has no explicit width of its own, so it reports the RIGHT
+ *     COLUMN's width, not the device's) and sets the sticky box's `top`
+ *     to `headerH + max(DEVICE_BOTTOM_CLEARANCE_PX, (availableHeight -
+ *     deviceSize) / 2)` — i.e. vertically centered in the space below
+ *     the header, with the clearance floor applying if centering alone
+ *     wouldn't give at least that much room (it always does once the
+ *     width cap above is in effect, but the floor is the actual
+ *     guarantee, not a coincidence of the two numbers happening to agree).
+ *     Re-runs in the same `measure()` pass as everything else (resize,
+ *     document-height change) — never on a scroll tick, since neither the
+ *     device's size nor the viewport's height change while scrolling.
+ *
+ * Reusing the full `100svh - header` height as the sticky box's OWN
+ * height (instead of just its `top` offset) was deliberately rejected
+ * for this — confirmed directly, in an earlier build, that it revives
+ * the exact "early release" bug `COPY_GAP_VH`'s own comment describes:
+ * the box's bottom edge would then sit at the viewport's own bottom edge
+ * with zero slack, releasing as soon as the row's bottom reaches the
+ * viewport bottom rather than once copy 2 has actually settled.
  *
  * ---- Device progress (p) — tied to copy position AND the device's own
  * stick point, not a pin formula ----
@@ -397,9 +490,16 @@ export function PartnershipSection() {
   // for why `deviceStickY` is derived from this, not from the sticky
   // element itself.
   const deviceColumnRef = useRef<HTMLDivElement | null>(null);
+  // The sticky box ITSELF (desktop only) — its own `top` is what the
+  // centering effect in measure() adjusts. Unlike deviceColumnRef, this
+  // one genuinely is the sticky element, not its parent.
+  const deviceBoxRef = useRef<HTMLDivElement | null>(null);
   const deviceRef = useRef<ScrollFrameSequenceHandle | null>(null);
   // Found once in measure() (not on every scroll tick) purely so paint()
   // can stamp `data-progress` on it for QA — see paint()'s own comment.
+  // Also doubles as the device-centering effect's own size measurement
+  // (the canvas's rendered width/height, not the sticky wrapper's own —
+  // see this component's "Desktop device centering" doc comment for why).
   const canvasElRef = useRef<HTMLElement | null>(null);
 
   const copy1RevealedRef = useRef(false);
@@ -543,6 +643,16 @@ export function PartnershipSection() {
       if (!canvasElRef.current) {
         canvasElRef.current = deviceColumn!.querySelector('canvas[aria-label="Telematics device"]');
       }
+
+      // Desktop device centering — see this component's own "Desktop
+      // device centering" doc comment. Only runs when deviceBoxRef is
+      // actually mounted (desktop only; null on mobile/reduced motion).
+      if (deviceBoxRef.current && canvasElRef.current) {
+        const deviceSize = canvasElRef.current.getBoundingClientRect().width;
+        const availH = viewportH - headerH;
+        const clearance = Math.max(DEVICE_BOTTOM_CLEARANCE_PX, (availH - deviceSize) / 2);
+        deviceBoxRef.current.style.top = `${headerH + clearance}px`;
+      }
     }
 
     function progressFor(scrollY: number) {
@@ -641,6 +751,29 @@ export function PartnershipSection() {
     // `copy1WrapRef`/`copy2WrapRef`/`deviceColumnRef` actually point to.
   }, [reducedMotion, isDesktop, inView]);
 
+  // Badge above heading, left-aligned, BADGE_HEADING_GAP between them —
+  // rendered in a different POSITION per layout below, not a fixed
+  // shared row above everything (see this component's own "Structure"
+  // doc comment for why).
+  const headingBlock = (
+    <div ref={headingWrapRef} className="flex w-fit flex-col items-start" style={{ gap: BADGE_HEADING_GAP }}>
+      <SectionBadge label="Partnership" />
+      <h2
+        className="font-normal"
+        style={{
+          color: "var(--fig-color-neutral-900)",
+          fontSize: "clamp(26px, 2.9vw, 42px)",
+          lineHeight: 1.05,
+          margin: 0,
+        }}
+      >
+        Global technology
+        <br />
+        Local people who make it work
+      </h2>
+    </div>
+  );
+
   return (
     <section
       ref={sectionRef}
@@ -676,53 +809,40 @@ export function PartnershipSection() {
           fontFamily: "var(--font-hanken-grotesk)",
         }}
       >
-        {/* Badge + heading row */}
-        <div ref={headingWrapRef} className="flex items-start justify-between gap-6">
-          <h2
-            className="font-normal"
-            style={{
-              color: "var(--fig-color-neutral-900)",
-              fontSize: "clamp(26px, 2.9vw, 42px)",
-              lineHeight: 1.05,
-              margin: 0,
-            }}
-          >
-            Global technology.
-            <br />
-            Local people who make it work.
-          </h2>
-          <SectionBadge label="Partnership" />
-        </div>
-
         {reducedMotion ? (
-          <div className="mt-16 flex flex-col items-center gap-10 lg:flex-row lg:items-start">
-            <div className="flex min-w-0 flex-col gap-8" style={{ maxWidth: COPY_MAX_WIDTH_PX, width: "100%" }}>
-              <p
-                className="font-normal"
-                style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
-              >
-                {COPY.geotab}
-              </p>
-              <p
-                className="font-normal"
-                style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
-              >
-                {COPY.feizm}
-              </p>
+          <>
+            {headingBlock}
+            <div className="mt-16 flex flex-col items-center gap-10 lg:flex-row lg:items-start">
+              <div className="flex min-w-0 flex-col gap-8" style={{ maxWidth: COPY_MAX_WIDTH_PX, width: "100%" }}>
+                <p
+                  className="font-normal"
+                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
+                >
+                  {COPY.geotab}
+                </p>
+                <p
+                  className="font-normal"
+                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "20px", lineHeight: "30px", margin: 0 }}
+                >
+                  {COPY.feizm}
+                </p>
+              </div>
+              <ScrollFrameSequence
+                frameUrls={DEVICE_FRAME_URLS}
+                fallbackSrc={DEVICE_FALLBACK_SRC}
+                alt="Telematics device"
+                reducedMotion
+                style={{ width: "min(60vw, 420px)", aspectRatio: "1 / 1", flexShrink: 0 }}
+              />
             </div>
-            <ScrollFrameSequence
-              frameUrls={DEVICE_FRAME_URLS}
-              fallbackSrc={DEVICE_FALLBACK_SRC}
-              alt="Telematics device"
-              reducedMotion
-              style={{ width: "min(60vw, 420px)", aspectRatio: "1 / 1", flexShrink: 0 }}
-            />
-          </div>
+          </>
         ) : isDesktop ? (
-          <div className="mt-16 flex" style={{ gap: 120 }}>
-            {/* LEFT column — copy in normal document flow */}
+          <div className="flex" style={{ gap: 120 }}>
+            {/* LEFT column — heading block first (see headingBlock's own
+                comment), then copy in normal document flow. */}
             <div className="shrink-0" style={{ width: `min(100%, ${COPY_MAX_WIDTH_PX}px)` }}>
-              <div aria-hidden style={{ height: `${LEAD_IN_VH}vh` }} />
+              {headingBlock}
+              <div aria-hidden className="mt-16" style={{ height: `${LEAD_IN_VH}vh` }} />
               <div ref={copy1WrapRef}>
                 <p
                   ref={copy1TextRef}
@@ -745,93 +865,99 @@ export function PartnershipSection() {
               <div aria-hidden style={{ height: `${TRAIL_VH}vh` }} />
             </div>
 
-            {/* RIGHT column — stretched by the flex row's own default
-                align-items:stretch to match the LEFT column's height;
-                the sticky box inside it is what actually stays put. Sized
-                to the DEVICE itself (not a full `100svh - header` box) —
-                a full-viewport-tall sticky box leaves no slack below it,
-                which was separately confirmed to force an early release
-                (the box's own bottom edge hits the viewport's bottom
-                edge, and from that instant there's no more row height
-                left for it to stay stuck in) well before copy 2 could
-                reach its settled position. */}
+            {/* RIGHT column — NO heading row above it any more: it starts
+                level with the badge (see this component's own "Structure"
+                doc comment for why that's the actual fix, not just a
+                cosmetic reorder). Stretched by the flex row's own default
+                align-items:stretch to match the LEFT column's height; the
+                sticky box inside it is what actually stays put. Sized to
+                the DEVICE itself (not a full `100svh - header` box) — see
+                "Desktop device centering" for why, and for how `top` gets
+                set to center it with clearance instead of just pinning it
+                under the header. */}
             <div ref={deviceColumnRef} className="relative min-w-0 flex-1">
-              <div style={{ position: "sticky", top: "var(--header-h)" }}>
+              <div ref={deviceBoxRef} style={{ position: "sticky", top: "var(--header-h)" }}>
                 <ScrollFrameSequence
                   ref={deviceRef}
                   frameUrls={DEVICE_FRAME_URLS}
                   fallbackSrc={DEVICE_FALLBACK_SRC}
                   alt="Telematics device"
-                  style={{ width: "min(624px, 90%)", aspectRatio: "1 / 1" }}
+                  style={{
+                    width: `min(624px, 90%, calc(100svh - var(--header-h) - ${2 * DEVICE_BOTTOM_CLEARANCE_PX}px))`,
+                    aspectRatio: "1 / 1",
+                  }}
                 />
               </div>
             </div>
           </div>
         ) : (
-          // `deviceColumnRef` goes on THIS outer wrapper, not a wrapper
-          // around just the sticky box — the sticky box's real CSS
-          // containing block (and therefore its actual stick-range) is
-          // its own PARENT's content box, which is this whole column
-          // (device + copy area together), not an isolated box around
-          // just the device. Wrapping only the device here would leave
-          // the sticky box with zero taller container to roam in and
-          // silently kill the stick effect — confirmed directly when
-          // first tried this way (see git history of this file).
-          <div ref={deviceColumnRef} className="mt-10 flex flex-col">
-            {/* Device — sticky near the top of the screen (not a full-
-                height box like desktop); the copy below it is what gives
-                this room to actually stick, same principle as the
-                desktop right column just rotated 90°. */}
-            <div
-              className="relative z-10 flex items-center justify-center"
-              style={{
-                position: "sticky",
-                top: "var(--header-h)",
-                height: `${MOBILE_DEVICE_VH}vh`,
-                // Opaque, not transparent: this box sticks at a fixed
-                // viewport position while copy scrolls underneath it, so
-                // it needs its own backdrop or that copy would show
-                // through. Reads the SAME live --partnership-bg custom
-                // property as the full-bleed layer (see this component's
-                // own "Scroll-linked background" doc comment) rather than
-                // a fixed tone, so it never mismatches the backdrop it's
-                // sitting on.
-                backgroundColor: `var(--partnership-bg, ${BG_START_COLOR})`,
-              }}
-            >
-              <ScrollFrameSequence
-                ref={deviceRef}
-                frameUrls={DEVICE_FRAME_URLS}
-                fallbackSrc={DEVICE_FALLBACK_SRC}
-                alt="Telematics device"
-                style={{ height: "85%", aspectRatio: "1 / 1", maxWidth: "85vw" }}
-              />
-            </div>
+          <>
+            {headingBlock}
+            {/* `deviceColumnRef` goes on THIS outer wrapper, not a wrapper
+                around just the sticky box — the sticky box's real CSS
+                containing block (and therefore its actual stick-range) is
+                its own PARENT's content box, which is this whole column
+                (device + copy area together), not an isolated box around
+                just the device. Wrapping only the device here would leave
+                the sticky box with zero taller container to roam in and
+                silently kill the stick effect — confirmed directly when
+                first tried this way (see git history of this file). */}
+            <div ref={deviceColumnRef} className="mt-10 flex flex-col">
+              {/* Device — sticky near the top of the screen (not a full-
+                  height box like desktop); the copy below it is what gives
+                  this room to actually stick, same principle as the
+                  desktop right column just rotated 90°. */}
+              <div
+                className="relative z-10 flex items-center justify-center"
+                style={{
+                  position: "sticky",
+                  top: "var(--header-h)",
+                  height: `${MOBILE_DEVICE_VH}vh`,
+                  // Opaque, not transparent: this box sticks at a fixed
+                  // viewport position while copy scrolls underneath it, so
+                  // it needs its own backdrop or that copy would show
+                  // through. Reads the SAME live --partnership-bg custom
+                  // property as the full-bleed layer (see this component's
+                  // own "Scroll-linked background" doc comment) rather than
+                  // a fixed tone, so it never mismatches the backdrop it's
+                  // sitting on.
+                  backgroundColor: `var(--partnership-bg, ${BG_START_COLOR})`,
+                }}
+              >
+                <ScrollFrameSequence
+                  ref={deviceRef}
+                  frameUrls={DEVICE_FRAME_URLS}
+                  fallbackSrc={DEVICE_FALLBACK_SRC}
+                  alt="Telematics device"
+                  style={{ height: "85%", aspectRatio: "1 / 1", maxWidth: "85vw" }}
+                />
+              </div>
 
-            <div className="mt-8 flex flex-col">
-              <div aria-hidden style={{ height: `${LEAD_IN_VH}vh` }} />
-              <div ref={copy1WrapRef}>
-                <p
-                  ref={copy1TextRef}
-                  className="font-normal"
-                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "18px", lineHeight: "28px", margin: 0 }}
-                >
-                  {COPY.geotab}
-                </p>
+              <div className="mt-8 flex flex-col">
+                <div aria-hidden style={{ height: `${LEAD_IN_VH}vh` }} />
+                <div ref={copy1WrapRef}>
+                  <p
+                    ref={copy1TextRef}
+                    className="font-normal"
+                    style={{ color: "var(--fig-color-neutral-900)", fontSize: "18px", lineHeight: "28px", margin: 0 }}
+                  >
+                    {COPY.geotab}
+                  </p>
+                </div>
+                <div aria-hidden style={{ height: `${COPY_GAP_VH}vh` }} />
+                <div ref={copy2WrapRef}>
+                  <p
+                    ref={copy2TextRef}
+                    className="font-normal"
+                    style={{ color: "var(--fig-color-neutral-900)", fontSize: "18px", lineHeight: "28px", margin: 0 }}
+                  >
+                    {COPY.feizm}
+                  </p>
+                </div>
+                <div aria-hidden style={{ height: `${TRAIL_VH}vh` }} />
               </div>
-              <div aria-hidden style={{ height: `${COPY_GAP_VH}vh` }} />
-              <div ref={copy2WrapRef}>
-                <p
-                  ref={copy2TextRef}
-                  className="font-normal"
-                  style={{ color: "var(--fig-color-neutral-900)", fontSize: "18px", lineHeight: "28px", margin: 0 }}
-                >
-                  {COPY.feizm}
-                </p>
-              </div>
-              <div aria-hidden style={{ height: `${TRAIL_VH}vh` }} />
             </div>
-          </div>
+          </>
         )}
       </div>
     </section>
