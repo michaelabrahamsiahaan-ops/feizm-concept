@@ -39,11 +39,15 @@ const OVERLAY_COLLAPSED_HEIGHT = 84;
 const OVERLAY_CROSSFADE_MS = 300;
 
 /**
- * flex-grow IS the Figma width in px (716 / 298). Their sum across the 3
- * cards (716+298+298=1312) equals the row's content width (1360) minus its
- * two 24px gaps exactly, so distributing available space by this ratio
- * reproduces the Figma widths pixel-for-pixel for ANY card being the
- * expanded one, not just the first — no renormalization needed.
+ * flex-grow IS the Figma width in px (716 / 298) — the ratio between
+ * cards, not a literal pixel target. Figma's own row gap is now 16px
+ * (confirmed via figma-cli eval, was 24px), but the row's own fixed
+ * width (1360) was apparently not updated alongside it: 716+298+298+2*16
+ * = 1344, 16px short of 1360. Rather than replicate that likely-stale
+ * dead space, flex-grow fills whatever width the row actually has,
+ * proportionally — cards come out ~1% wider than Figma's literal px
+ * values at the 1360px reference width, which reads as the row simply
+ * filling itself correctly rather than leaving an unexplained gap.
  */
 function cardFlexStyle(isExpanded: boolean, reducedMotion: boolean): CSSProperties {
   const base: CSSProperties = {
@@ -214,7 +218,7 @@ function MobileIndustryCard({ company }: { company: IndustryCompany }) {
       <div className="absolute inset-x-0 bottom-0">
         <CardOverlay isExpanded reducedMotion />
         <div className="relative flex flex-col" style={{ gap: 24, padding: 24 }}>
-          <h3 className="font-semibold text-white" style={{ fontSize: 24, lineHeight: "36px", fontFamily: "var(--font-hanken-grotesk)" }}>
+          <h3 className="font-medium text-white" style={{ fontSize: 20, lineHeight: "30px", fontFamily: "var(--font-hanken-grotesk)" }}>
             {company.name}
           </h3>
           <CardDetails company={company} />
@@ -287,8 +291,8 @@ export function IndustryCard({
         <CardOverlay isExpanded={isExpanded} reducedMotion={reducedMotion} />
         <div className="relative flex flex-col" style={{ gap: 24, padding: 24 }}>
           <h3
-            className="font-semibold text-white"
-            style={{ fontSize: 24, lineHeight: "36px", fontFamily: "var(--font-hanken-grotesk)" }}
+            className="font-medium text-white"
+            style={{ fontSize: 20, lineHeight: "30px", fontFamily: "var(--font-hanken-grotesk)" }}
           >
             {company.name}
           </h3>

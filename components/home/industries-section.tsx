@@ -198,7 +198,7 @@ export function IndustriesSection() {
           className="relative flex w-full"
           style={{
             height: CARD_HEIGHT,
-            gap: "24px",
+            gap: "16px",
             opacity: rowOpacity,
             transition: reducedMotion ? "none" : `opacity ${TAB_SWITCH_MS}ms ease`,
           }}
