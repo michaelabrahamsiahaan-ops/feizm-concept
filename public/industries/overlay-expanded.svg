@@ -12,7 +12,15 @@
       <stop offset="0" stop-color="#393939" stop-opacity="0"/>
       <stop offset="0.097015" stop-color="#000000" stop-opacity="0.2"/>
     </linearGradient>
+    <!-- Figma's NOISE effect on this layer: MONOTONE, color #393939, alpha 0.2, size 1, density 1.
+         feTurbulence drives per-pixel alpha (true grain, not a flat tint); feColorMatrix holds RGB
+         constant at that gray and scales the turbulence's own alpha channel down to the 0.2 max. -->
+    <filter id="grain" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0.2247  0 0 0 0 0.2247  0 0 0 0 0.2247  0 0 0 0.2 0"/>
+    </filter>
   </defs>
   <rect width="716" height="201" fill="url(#warm)"/>
   <rect width="716" height="201" fill="url(#dark)"/>
+  <rect width="716" height="201" filter="url(#grain)"/>
 </svg>
