@@ -26,6 +26,18 @@ const TEXT_IN_MS = 300;
 const TEXT_IN_DELAY_MS = 330;
 const TEXT_OUT_MS = 150;
 
+// Figma's own "Rectangle 5" overlay box: `layoutPositioning: ABSOLUTE`,
+// `constraints: {vertical: MAX}` (bottom-anchored) and a FIXED height —
+// confirmed via figma-cli eval, identical across all 3 Environmental
+// Services cards, both states. It does NOT grow with the caption's own
+// content (confirmed on Clearwater's collapsed variant specifically: its
+// caption frame hugs to 120px for the 2-line name, but Rectangle 5 stays
+// pinned at 84px flush with the bottom — the first line of a wrapped name
+// sits above the overlay, directly on the photo, in Figma itself).
+const OVERLAY_EXPANDED_HEIGHT = 201;
+const OVERLAY_COLLAPSED_HEIGHT = 84;
+const OVERLAY_CROSSFADE_MS = 300;
+
 /**
  * flex-grow IS the Figma width in px (716 / 298). Their sum across the 3
  * cards (716+298+298=1312) equals the row's content width (1360) minus its
@@ -87,30 +99,43 @@ function detailContentStyle(isExpanded: boolean, reducedMotion: boolean): CSSPro
 }
 
 /**
- * The caption's own background — read live off the card's "Rectangle 5"
- * fills (figma-cli eval, including each fill's `gradientTransform`, which
- * the first read of this missed for the radial fill, producing a huge
- * wash instead of a small corner glow — confirmed wrong directly against
- * an isolated `figma-cli verify` screenshot of the real rectangle, both
- * variants, with the photo removed): an always-on radial, `#f25a29` (at
- * its center) -> `#c36623` at 30.3% -> fully transparent by ~55%, with
- * its center anchored at the caption's own BOTTOM-RIGHT corner (confirmed
- * against the isolated screenshots: the warm color hugs the right edge
- * and bottom, fading to nothing by roughly the midpoint, not spread
- * across the whole card) — plus, ONLY while expanded, a linear black fade
- * top->bottom at 20% layer opacity (`rgba(57,57,57,0)` -> `rgba(0,0,0,0.2)`
- * — Figma's own 0->1 alpha stops times its 0.2 layer opacity). Figma's
- * own transform is also slightly skewed/rotated (off-diagonal terms in
- * the matrix); this reproduces the same stops and corner anchoring
- * visually rather than pixel-matching that exact skew, which isn't worth
- * reverse-matrixing by hand for a decorative scrim. Figma's mono grain
- * noise effect has no CSS equivalent without a second image asset and is
- * intentionally skipped here (cosmetic only).
+ * The caption's own background: Figma's EXACT SVG gradients, not a CSS
+ * approximation. The Plugin API's `gradientStops` only exposes 3 control
+ * points (`#f25a29` -> `#c36623` at 30.3% -> transparent) — a first pass
+ * built from just those 3 produced a glow concentrated in one corner
+ * instead of Figma's actual soft warm-brown spread. The REAL rendered
+ * gradient (measured directly in Figma, 6 stops incl. 2 partial-alpha
+ * mid stops) and its exact `gradientTransform` matrices are baked into
+ * `public/industries/overlay-{expanded,collapsed}.svg` as real SVG
+ * `radialGradient`/`linearGradient` defs (`preserveAspectRatio="none"` so
+ * stretching them to a non-native aspect ratio via `background-size: 100%
+ * 100%` doesn't letterbox) — confirmed identical across all 3
+ * Environmental Services cards via figma-cli eval, so one pair of SVGs
+ * covers all of them, not just Greenline.
+ *
+ * Both overlay images are always mounted and CROSSFADE opacity over
+ * `OVERLAY_CROSSFADE_MS`, independent of the 550ms width transition —
+ * NOT a single gradient morphing shape, which is what made the overlay
+ * visibly distort mid-animation before. The collapsed SVG has no dark
+ * linear layer at all (Figma: `visible: false` on Default/collapsed,
+ * confirmed on all 3 cards), matching the "dark layer only in Hovered"
+ * rule exactly rather than a single gradient needing to fade a layer in.
  */
-function captionBackgroundStyle(isExpanded: boolean): CSSProperties {
-  const radial = "radial-gradient(ellipse 85% 160% at 100% 100%, #f25a29 0%, #c36623 28%, transparent 55%)";
-  const linear = "linear-gradient(to bottom, rgba(57,57,57,0) 0%, rgba(0,0,0,0.2) 100%)";
-  return { backgroundImage: isExpanded ? `${linear}, ${radial}` : radial };
+function CardOverlay({ isExpanded, reducedMotion }: { isExpanded: boolean; reducedMotion: boolean }) {
+  const transition = reducedMotion ? "none" : `opacity ${OVERLAY_CROSSFADE_MS}ms ease`;
+  const base: CSSProperties = { backgroundSize: "100% 100%", backgroundRepeat: "no-repeat" };
+  return (
+    <>
+      <div
+        className="absolute inset-x-0 bottom-0"
+        style={{ ...base, height: OVERLAY_EXPANDED_HEIGHT, backgroundImage: "url(/industries/overlay-expanded.svg)", opacity: isExpanded ? 1 : 0, transition }}
+      />
+      <div
+        className="absolute inset-x-0 bottom-0"
+        style={{ ...base, height: OVERLAY_COLLAPSED_HEIGHT, backgroundImage: "url(/industries/overlay-collapsed.svg)", opacity: isExpanded ? 0 : 1, transition }}
+      />
+    </>
+  );
 }
 
 /**
@@ -186,11 +211,14 @@ function MobileIndustryCard({ company }: { company: IndustryCompany }) {
   return (
     <a href={company.href} className="relative block w-full overflow-hidden" style={{ height: CARD_HEIGHT, backgroundColor: "#eeeeee" }}>
       <CardPhoto company={company} position={position} reducedMotion />
-      <div className="absolute inset-x-0 bottom-0 flex flex-col" style={{ gap: 24, padding: 24, ...captionBackgroundStyle(true) }}>
-        <h3 className="font-semibold text-white" style={{ fontSize: 24, lineHeight: "36px", fontFamily: "var(--font-hanken-grotesk)" }}>
-          {company.name}
-        </h3>
-        <CardDetails company={company} />
+      <div className="absolute inset-x-0 bottom-0">
+        <CardOverlay isExpanded reducedMotion />
+        <div className="relative flex flex-col" style={{ gap: 24, padding: 24 }}>
+          <h3 className="font-semibold text-white" style={{ fontSize: 24, lineHeight: "36px", fontFamily: "var(--font-hanken-grotesk)" }}>
+            {company.name}
+          </h3>
+          <CardDetails company={company} />
+        </div>
       </div>
     </a>
   );
@@ -255,20 +283,20 @@ export function IndustryCard({
     >
       <CardPhoto company={company} position={position} reducedMotion={reducedMotion} />
 
-      <div
-        className="absolute inset-x-0 bottom-0 flex flex-col"
-        style={{ gap: 24, padding: 24, ...captionBackgroundStyle(isExpanded) }}
-      >
-        <h3
-          className="font-semibold text-white"
-          style={{ fontSize: 24, lineHeight: "36px", fontFamily: "var(--font-hanken-grotesk)" }}
-        >
-          {company.name}
-        </h3>
+      <div className="absolute inset-x-0 bottom-0">
+        <CardOverlay isExpanded={isExpanded} reducedMotion={reducedMotion} />
+        <div className="relative flex flex-col" style={{ gap: 24, padding: 24 }}>
+          <h3
+            className="font-semibold text-white"
+            style={{ fontSize: 24, lineHeight: "36px", fontFamily: "var(--font-hanken-grotesk)" }}
+          >
+            {company.name}
+          </h3>
 
-        <div style={detailWrapStyle(isExpanded, reducedMotion)}>
-          <div style={detailContentStyle(isExpanded, reducedMotion)}>
-            <CardDetails company={company} />
+          <div style={detailWrapStyle(isExpanded, reducedMotion)}>
+            <div style={detailContentStyle(isExpanded, reducedMotion)}>
+              <CardDetails company={company} />
+            </div>
           </div>
         </div>
       </div>

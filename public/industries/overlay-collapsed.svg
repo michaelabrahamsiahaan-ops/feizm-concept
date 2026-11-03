@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 298 84" preserveAspectRatio="none">
+  <defs>
+    <radialGradient id="warm" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="10" gradientTransform="matrix(-29.501 -2.065 0.13377 -8.2608 290.03 93.1)">
+      <stop offset="0" stop-color="#F25A29" stop-opacity="1"/>
+      <stop offset="0.30288" stop-color="#C36623" stop-opacity="1"/>
+      <stop offset="0.47716" stop-color="#924D1B" stop-opacity="0.75"/>
+      <stop offset="0.65144" stop-color="#623312" stop-opacity="0.5"/>
+      <stop offset="0.82572" stop-color="#311A09" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="298" height="84" fill="url(#warm)"/>
+</svg>
