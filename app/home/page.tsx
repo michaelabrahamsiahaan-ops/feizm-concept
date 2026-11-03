@@ -3,6 +3,7 @@ import { HomeCompany } from "@/components/HomeCompany";
 import { StatsSection } from "@/components/home/stats-section";
 import { ServicesSection } from "@/components/home/services-section";
 import { PartnershipSection } from "@/components/home/partnership-section";
+import { IndustriesSection } from "@/components/home/industries-section";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SmoothScroll } from "@/components/shared/smooth-scroll";
 
@@ -48,10 +49,19 @@ import { SmoothScroll } from "@/components/shared/smooth-scroll";
  * two copy blocks at one spot — replaced, see git history and that
  * component's own doc comment) — only its device illustration is
  * `position: sticky`, joinsystems.co-style, while its copy scrolls past
- * normally on the left. It's also the LAST section on the page — no
- * Footer here yet (confirmed: not in Figma as a `Home /` frame, unlike
- * the About page) — which matters for that component's own
- * scroll-breakpoint clamp (see its doc comment for why).
+ * normally on the left. Its own scroll-breakpoint clamp (see that
+ * component's doc comment) was written for it being the last section and
+ * is UNCHANGED now that IndustriesSection follows it — the clamp only
+ * caps how far the device's progress can run past Partnership's own
+ * bottom edge, which still holds with real content below it.
+ *
+ * IndustriesSection ("Home / 06 Industries") is a plain static section —
+ * no scroll-linked animation, no pin — with its own hover-accordion
+ * interaction self-contained inside the component. It's now the LAST
+ * section on the page — no Footer here yet (confirmed: not in Figma as a
+ * `Home /` frame, unlike the About page). White-to-white hand-off from
+ * Partnership's own background fade, no seam (see IndustriesSection's own
+ * doc comment).
  */
 export default function HomePage() {
   return (
@@ -83,6 +93,14 @@ export default function HomePage() {
         <ServicesSection />
       </div>
       <PartnershipSection />
+      {/* Same fixed-1440px-overflow fix as ServicesSection above (see that
+          wrapper's own comment for why this can't live on html/body):
+          confirmed directly, IndustriesSection without this wrapper
+          reproduced the exact same whole-page zoom-out at 375x812
+          (window.innerWidth reporting 1440 instead of 375). */}
+      <div className="w-full overflow-x-hidden">
+        <IndustriesSection />
+      </div>
     </main>
   );
 }
