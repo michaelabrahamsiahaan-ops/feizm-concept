@@ -98,6 +98,8 @@ const DEVICE_BOTTOM_CLEARANCE_PX = 40;
 // OTHER side either, for free).
 const BG_START_COLOR = "#FEEFEA";
 const BG_END_COLOR = "#FFFFFF";
+const BG_START_RGB = hexToRgb(BG_START_COLOR);
+const BG_END_RGB = hexToRgb(BG_END_COLOR);
 
 // ---- Device frame sequence (public/illustrations/device/, copied from
 // ~/Downloads/device-scroll/ — see that folder's own README.md for the
@@ -158,6 +160,13 @@ function clamp01(v: number) {
 }
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+// Hoisted (function declaration, not a const arrow) so BG_START_RGB /
+// BG_END_RGB above can call it at module-evaluation time, before this
+// point in the file is reached line-by-line.
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 // Same live measurement StatsSection/SiteHeader/ScrollLink all use for
@@ -421,11 +430,25 @@ function setupReveal(wrapper: HTMLElement, text: HTMLElement, onRevealed?: () =>
  *     brief asks for, "by the time the device has finished rotating")
  * `paint()` turns that into `bgT = easeInOutCubic(clamp01((scrollY -
  * bgStartY) / (bgEndY - bgStartY)))` and writes ONE CSS custom property,
- * `--partnership-bg`, as a `color-mix(in oklch, ...)` string — letting
- * the browser's own OKLCH interpolation produce an even fade (no muddy
- * gray midpoint, which plain sRGB lerp gets here specifically because
- * peach and white sit on close-but-not-identical hue angles) instead of
- * hand-rolling sRGB<->OKLCH conversion math for two fixed endpoints.
+ * `--partnership-bg`, as a plain `rgb(...)` string — each channel
+ * lerped directly in sRGB (`hexToRgb` + `lerp`, both already defined
+ * above for other reasons).
+ *
+ * An earlier version used `color-mix(in oklch, ...)` instead, reasoning
+ * that OKLCH's perceptual uniformity would avoid a muddy midpoint — but
+ * that was a solution to a problem these two colors don't actually have
+ * (they're close together and both near-white, nothing here was ever
+ * going muddy), and it introduced a REAL one: peach and white are both
+ * low-chroma colors, which OKLCH represents with a "powerless" (ill-
+ * defined) hue component, and interpolating hue between two powerless
+ * values is explicitly browser-dependent per spec — confirmed directly,
+ * the user's own Chrome rendered a visibly pink/rose midpoint that never
+ * showed up in this project's own testing tools, because their engine
+ * picked a different hue to interpolate through than ours did. Plain
+ * sRGB lerp has no hue channel to go wrong in the first place, and for
+ * two colors this close together it can't produce mud either — the
+ * "OKLCH to avoid mud" concern only bites when interpolating between
+ * distant, saturated hues, which this never was.
  *
  * The color lives on ONE custom property set on the section element
  * itself, read by two different consumers via `var(--partnership-bg, ...)`
@@ -676,26 +699,20 @@ export function PartnershipSection() {
       // read by any other code in this component.
       if (canvasElRef.current) canvasElRef.current.dataset.progress = p.toFixed(4);
 
-      // Scroll-linked background — see this component's own doc comment.
+      // Scroll-linked background — see this component's own doc comment
+      // for why this is a hand-rolled sRGB lerp, not color-mix(in oklch).
       // One write (a CSS custom property on the section), read by every
-      // consumer via var(--partnership-bg, ...); color-mix's own
-      // percentages run from end->start as bgT goes 0->1 (100% start at
-      // bgT=0, 100% end at bgT=1). The two ends are set to the literal
-      // hex directly rather than color-mix(... 100%, ... 0%) — the sRGB
-      // -> OKLCH -> sRGB round trip through color-mix introduces a tiny
-      // rounding drift even at a 100%/0% split (confirmed directly:
-      // #feefea came back as #feeef2, a 1-8/255 difference per channel,
-      // invisible but not byte-exact) — and byte-exact is what "no
-      // visible seam" at the Services hand-off actually depends on.
+      // consumer via var(--partnership-bg, ...). Byte-exact at both ends
+      // by construction (lerp at t=0/t=1 returns the endpoint exactly, no
+      // color-space round trip to introduce drift) — important because
+      // that exactness is what "no visible seam" at the Services hand-off
+      // actually depends on.
       if (sectionRef.current) {
         const bgT = easeInOutCubic(clamp01((scrollY - bgStartYRef.current) / (bgEndYRef.current - bgStartYRef.current)));
-        const bg =
-          bgT <= 0
-            ? BG_START_COLOR
-            : bgT >= 1
-              ? BG_END_COLOR
-              : `color-mix(in oklch, ${BG_START_COLOR} ${(1 - bgT) * 100}%, ${BG_END_COLOR} ${bgT * 100}%)`;
-        sectionRef.current.style.setProperty("--partnership-bg", bg);
+        const r = Math.round(lerp(BG_START_RGB[0], BG_END_RGB[0], bgT));
+        const g = Math.round(lerp(BG_START_RGB[1], BG_END_RGB[1], bgT));
+        const b = Math.round(lerp(BG_START_RGB[2], BG_END_RGB[2], bgT));
+        sectionRef.current.style.setProperty("--partnership-bg", `rgb(${r}, ${g}, ${b})`);
       }
 
       if (ENABLE_FOCUS_DIM) {
