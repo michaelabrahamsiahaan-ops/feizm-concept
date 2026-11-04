@@ -15,6 +15,13 @@ export const EXPANDED_FLEX = 716;
 export const COLLAPSED_FLEX = 298;
 export const CARD_HEIGHT = 504;
 
+// Card root stroke — confirmed via figma-cli eval: solid #c5c5c4, 1px,
+// `strokeAlign: INSIDE`, identical on all 3 companies and both states.
+// CSS `border` matches INSIDE semantics directly under this project's
+// global `box-sizing: border-box` (Tailwind preflight), so it doesn't
+// perturb the flex-grow width math (cardFlexStyle) at all.
+const CARD_BORDER = "1px solid #c5c5c4";
+
 const WIDTH_MS = 550;
 const WIDTH_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 // Collapsing delays the width shrink so the text block (below) has time to
@@ -213,7 +220,7 @@ function CardDetails({ company }: { company: IndustryCompany }) {
 function MobileIndustryCard({ company }: { company: IndustryCompany }) {
   const position = company.imagePosition?.expanded ?? "center";
   return (
-    <a href={company.href} className="relative block w-full overflow-hidden" style={{ height: CARD_HEIGHT, backgroundColor: "#eeeeee" }}>
+    <a href={company.href} className="relative block w-full overflow-hidden" style={{ height: CARD_HEIGHT, backgroundColor: "#eeeeee", border: CARD_BORDER }}>
       <CardPhoto company={company} position={position} reducedMotion />
       <div className="absolute inset-x-0 bottom-0">
         <CardOverlay isExpanded reducedMotion />
@@ -279,7 +286,7 @@ export function IndustryCard({
       ref={cardRef}
       href={company.href}
       className="relative block overflow-hidden outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--fig-color-brand-500)]"
-      style={{ ...cardFlexStyle(isExpanded, reducedMotion), height: CARD_HEIGHT, backgroundColor: "#eeeeee" }}
+      style={{ ...cardFlexStyle(isExpanded, reducedMotion), height: CARD_HEIGHT, backgroundColor: "#eeeeee", border: CARD_BORDER }}
       onMouseEnter={() => canHover && onEnter()}
       onFocus={onFocus}
       onClick={handleClick}

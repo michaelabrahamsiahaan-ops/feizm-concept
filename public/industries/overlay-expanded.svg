@@ -14,13 +14,19 @@
     </linearGradient>
     <!-- Figma's NOISE effect on this layer: MONOTONE, color #393939, alpha 0.2, size 1, density 1.
          feTurbulence drives per-pixel alpha (true grain, not a flat tint); feColorMatrix holds RGB
-         constant at that gray and scales the turbulence's own alpha channel down to the 0.2 max. -->
+         constant at that gray and scales the turbulence's own alpha channel down to the 0.2 max.
+         Plain alpha-compositing of that gray barely reads over a busy/colorful photo (confirmed:
+         pixel-sampled the rasterized SVG directly, the grain IS there with real per-pixel variance —
+         it was just visually swamped by the photo's own color/detail at a flat NORMAL blend). Figma
+         renders this effect with enough local-contrast punch to read on any photo; `mix-blend-mode:
+         overlay` is the CSS equivalent of that punch (modulates the photo's own local contrast
+         instead of just fading toward gray), so the rect carries it directly. -->
     <filter id="grain" x="0%" y="0%" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise"/>
-      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0.2247  0 0 0 0 0.2247  0 0 0 0 0.2247  0 0 0 0.2 0"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.25" numOctaves="2" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0.2247  0 0 0 0 0.2247  0 0 0 0 0.2247  0 0 0 0.45 0"/>
     </filter>
   </defs>
   <rect width="716" height="201" fill="url(#warm)"/>
   <rect width="716" height="201" fill="url(#dark)"/>
-  <rect width="716" height="201" filter="url(#grain)"/>
+  <rect width="716" height="201" filter="url(#grain)" style="mix-blend-mode:overlay"/>
 </svg>

@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 import { OVERLAP_VH } from "@/components/home/overlap-config";
+import { SectionBadge } from "@/components/SectionBadge";
 
 // ---- Tunable constants ----
 const SECTION_W = 1440; // desktop (>=DESKTOP_BREAKPOINT) Figma frame width
@@ -48,7 +49,7 @@ const BLACK: [number, number, number] = [3, 0, 0]; // --fig-color-neutral-900 (t
 
 const HEADING_TEXT = "Your Problem, Our Mission to Solve";
 const PARAGRAPH_TEXT =
-  "We believe in bringing the best solutions by developing meaningful partnerships across the globe and applying their expertise to successfully implement comprehensive solutions in areas of fleet management, asset tracking, safety & surveillance and transport management with IoT. ";
+  "We believe in bringing the best solutions by developing meaningful partnerships across the globe and applying their expertise to successfully implement comprehensive solutions in areas of fleet management, asset tracking, safety & surveillance and transport management with IoT ";
 
 function clamp(v: number, a: number, b: number) {
   return v < a ? a : v > b ? b : v;
@@ -822,24 +823,32 @@ export function HomeCompany() {
             }}
           />
 
-          <div
-            className="relative flex flex-col"
-            style={{ width: `${TEXT_COLUMN_WIDTH_PCT}%`, gap: "59.87px" /* Container's own itemSpacing, re-read — was wrongly 64 (that's the OUTER frame's spacing, between Pattern/Frame 7, not the text gap) */ }}
-          >
-            <h2
-              ref={headingWrapRef}
-              className="font-normal"
-              style={{ fontSize: "40px", lineHeight: "44.9px", ...appearStyle() }}
+          {/* Badge ("Company") — new in Figma: Container (the text
+              column) and Badge are siblings in Frame 7's own HORIZONTAL,
+              space-between, top-aligned layout, not stacked — re-read
+              fresh, not assumed from the other two sections' similar
+              badge. */}
+          <div className="relative flex w-full items-start justify-between">
+            <div
+              className="relative flex flex-col"
+              style={{ width: `${TEXT_COLUMN_WIDTH_PCT}%`, gap: "59.87px" /* Container's own itemSpacing, re-read — was wrongly 64 (that's the OUTER frame's spacing, between Pattern/Frame 7, not the text gap) */ }}
             >
-              <SweepWords text={HEADING_TEXT} startIndex={0} wordRefs={wordRefs} />
-            </h2>
-            <p
-              ref={paragraphWrapRef}
-              className="font-normal"
-              style={{ fontSize: "40px", lineHeight: "49.9px", ...appearStyle() }}
-            >
-              <SweepWords text={PARAGRAPH_TEXT} startIndex={headingWordCount} wordRefs={wordRefs} />
-            </p>
+              <h2
+                ref={headingWrapRef}
+                className="font-normal"
+                style={{ fontSize: "40px", lineHeight: "44.9px", ...appearStyle() }}
+              >
+                <SweepWords text={HEADING_TEXT} startIndex={0} wordRefs={wordRefs} />
+              </h2>
+              <p
+                ref={paragraphWrapRef}
+                className="font-normal"
+                style={{ fontSize: "40px", lineHeight: "49.9px", ...appearStyle() }}
+              >
+                <SweepWords text={PARAGRAPH_TEXT} startIndex={headingWordCount} wordRefs={wordRefs} />
+              </p>
+            </div>
+            <SectionBadge label="Company" />
           </div>
         </div>
       </div>

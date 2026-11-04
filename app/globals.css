@@ -133,25 +133,9 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Safety net, not a ServicesSection-specific fix: that section is
-       intentionally a fixed 1440px design (matches Figma, same
-       convention as Principles.tsx on the About page), but WITHOUT this,
-       a narrow mobile viewport doesn't just horizontally-scroll past it —
-       confirmed directly, Chromium's mobile emulation at 375x812 reported
-       window.innerWidth/innerHeight as 1440x3119, i.e. the ENTIRE PAGE
-       (not just this one section) zooms out to accommodate the widest
-       overflowing element, breaking every other (already-responsive)
-       section's own layout along with it. Needed on BOTH html and body —
-       confirmed directly, html alone did not stop the zoom-out. This
-       contains the damage to "the one non-responsive section clips/needs
-       a horizontal scroll," not "the whole homepage renders unreadably
-       tiny." Making ServicesSection itself fluid at narrow widths is a
-       separate, larger change, not part of this one. */
-    overflow-x: hidden;
   }
   html {
     @apply font-sans;
-    overflow-x: hidden;
   }
 }
 

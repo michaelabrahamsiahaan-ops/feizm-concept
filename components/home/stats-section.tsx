@@ -3,7 +3,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Building, CalendarFold, Earth, Truck } from "lucide-react";
 import type { ComponentType } from "react";
-import { HalftoneGlobeWidget } from "@/components/HalftoneGlobeWidget";
+import { HalftoneGlobeWidget } from "../HalftoneGlobeWidget";
+import { SectionBadge } from "../SectionBadge";
 
 // ---- Card: fluid, fits the viewport under the header ----
 // Figma's own section padding (40px sides / 60px top+bottom at its 1440
@@ -63,13 +64,28 @@ const GLOBE_KEYFRAMES_PCT = [
   { sizePctW: 74.2647, xPctW: 12.8676, yPctH: 12.0 }, // P=0.5 (keyframe 02)
   { sizePctW: 47.0588, xPctW: 26.4706, yPctH: -6.5714 }, // P=1 (keyframe 03)
 ];
-// The widget's own DEFAULTS (dotColor/rimColor) are white/near-black,
-// meant for a dark hero-style background — invisible against this card's
-// near-white one. Read directly off Figma's own "dots"/"rim" layers:
-// both rgb(73,73,73) — rim additionally at 25% opacity in Figma, baked
-// into this rgba() since the widget applies none of its own.
-const GLOBE_DOT_COLOR = "#494949";
-const GLOBE_RIM_COLOR = "rgba(73,73,73,0.25)";
+// Live-rotating canvas widget (public/halftone-globe-v2.js — an updated
+// build of the same vendored script, loaded under its own `HalftoneGlobeV2`
+// global so it can coexist with Hero.tsx's older `/halftone-globe.js`
+// instance; see HalftoneGlobeWidget.tsx). A static SVG export was tried
+// here first for a real, measured reason (the canvas widget's own
+// continuous full redraw of ~7000 dots cost ~97-130ms/frame, well past a
+// 16.67ms budget, even while idle) and fully solved it — but gave up
+// rotation entirely, which was then explicitly asked for back. This v2
+// script's new `layout: 'center'` option draws the SAME centered full
+// circle this section already used (`centerX=540, centerY=540, radius=420`
+// in the 1080 design space — matches GLOBE_KEYFRAMES_PCT's own math
+// unchanged), so no keyframe/percentage changes were needed for this swap
+// either. The redraw-cost problem itself is NOT gone (still ~7000 dots,
+// every frame, while the globe is on screen) — an earlier version here
+// paused the widget specifically WHILE the page was scrolling to avoid
+// stacking that cost on top of this section's own scroll-tick work, but
+// that made the globe visibly freeze for the entire time the user was
+// scrolling through the section, which reads as broken, not smooth. The
+// widget's own built-in IntersectionObserver already starts/stops it
+// purely on viewport visibility (see the script's own `io`/`visible`
+// logic), so it now just keeps rotating the whole time it's on screen —
+// scrolling or not — with no extra pause/resume wiring needed here.
 
 // ---- Scroll-linked progress (A) ----
 // Pinned — see this component's own doc comment for the fuller
@@ -415,6 +431,17 @@ export function StatsSection() {
 
     tick();
 
+    // No globe pause/resume here anymore — the widget's own
+    // IntersectionObserver (public/halftone-globe-v2.js) already starts/
+    // stops its rAF loop purely on viewport visibility, so it keeps
+    // rotating for the whole time the section is on screen, scrolling or
+    // not (an earlier version paused it specifically WHILE scrolling,
+    // which read as "frozen until you stop scrolling" — the opposite of
+    // what was wanted). This section's own scroll-tick above is cheap on
+    // its own regardless (verified: 16.67ms/frame); the globe's ~7000-dot
+    // redraw is a separate, already-known cost of keeping it animated at
+    // all (see GLOBE_KEYFRAMES_PCT's neighboring comment) — accepted here
+    // as the tradeoff for visible rotation during scroll.
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
@@ -559,6 +586,15 @@ export function StatsSection() {
             borderRadius: CARD_RADIUS,
           }}
         >
+          {/* Badge ("Stats") — new in Figma: fixed at the card's own
+              top-left corner (24px/24px, literal — not a % of card size
+              like the globe/counter row, since it's a small corner badge
+              that doesn't scale with the card), independent of the globe/
+              counter row's own positioning below. */}
+          <div className="absolute z-20" style={{ top: "24px", left: "24px" }}>
+            <SectionBadge label="Stats" />
+          </div>
+
           <div
             ref={globeWrapRef}
             aria-hidden="true"
@@ -567,11 +603,13 @@ export function StatsSection() {
           >
             <HalftoneGlobeWidget
               className="h-full w-full"
-              dotColor={GLOBE_DOT_COLOR}
-              rimColor={GLOBE_RIM_COLOR}
-              centerX={540}
-              centerY={540}
-              radius={420}
+              scriptSrc="/halftone-globe-v2.js"
+              globalName="HalftoneGlobeV2"
+              layout="center"
+              speed={6}
+              dotColor="#494949"
+              arcColor="#FF7A1A"
+              background="transparent"
             />
           </div>
 
@@ -583,12 +621,24 @@ export function StatsSection() {
             {STATS.map((stat, i) => {
               const { label, icon: Icon, value, suffix } = stat;
               const finalText = formatThousands(value) + suffix;
+              // Figma gives every cell a top/bottom/left border but
+              // ZEROES OUT the right border on every cell except the
+              // last (confirmed directly: cells 0-2 have
+              // strokeRightWeight 0, cell 3 has all four sides at 1) —
+              // each internal divider is drawn ONCE, by the next cell's
+              // own left edge, not twice. A uniform `border` on every
+              // cell (this component's previous approach) doubles every
+              // shared edge instead.
+              const isLast = i === STATS.length - 1;
               return (
                 <div
                   key={label}
                   className="flex flex-1 flex-col"
                   style={{
-                    border: "1px solid var(--fig-color-neutral-300)",
+                    borderTop: "1px solid var(--fig-color-neutral-300)",
+                    borderBottom: "1px solid var(--fig-color-neutral-300)",
+                    borderLeft: "1px solid var(--fig-color-neutral-300)",
+                    borderRight: isLast ? "1px solid var(--fig-color-neutral-300)" : "none",
                     padding: "var(--fig-spacing-15)",
                     gap: CARD_GAP,
                   }}

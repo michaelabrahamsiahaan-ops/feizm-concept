@@ -112,6 +112,21 @@ const TRANSITION = "duration-[250ms] ease-in-out motion-reduce:transition-none";
  * but the same early-switch-to-solid behavior still makes sense once
  * there's *something* below the Hero to switch on.
  *
+ * Force-overlay override: any section can ask for the overlay (dark-text-
+ * friendly) state regardless of the triggerId computation above — e.g.
+ * TestimoniesSection's scroll-driven expand-to-fullscreen reveal, which
+ * sits on a photo and needs the overlay state once it fills the
+ * viewport, even though by then `triggerId`'s own math says "solid"
+ * (every section below Hero does). Rather than prop-drilling or lifting
+ * state into a shared client ancestor (page.tsx is a server component;
+ * doing this would mean converting it), any section signals this the
+ * same way `triggerId` itself works — through a plain DOM read, not a
+ * React data path — by toggling `document.documentElement.dataset.
+ * forceHeaderOverlay = "true"/removeAttribute(...)`. This effect's own
+ * `compute()` checks it on every scroll tick (the same tick already
+ * re-reading `triggerId`'s position), so it's correct the instant either
+ * input changes, from either direction, with no extra listener needed.
+ *
  * Boundary case: a ScrollLink landing (components/shared/scroll-link.tsx)
  * puts the trigger section's top edge EXACTLY at the header's bottom edge
  * via `scroll-margin-top: var(--header-h)` — right on this effect's `<=`
@@ -176,7 +191,9 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
     // doc comment above for why a sentinel + IntersectionObserver used to
     // be here and why it broke for an exact ScrollLink landing).
     const compute = () => {
-      setSolid(target.getBoundingClientRect().top <= headerHeightRef.current + SOLID_EPSILON);
+      const baseSolid = target.getBoundingClientRect().top <= headerHeightRef.current + SOLID_EPSILON;
+      const forceOverlay = document.documentElement.dataset.forceHeaderOverlay === "true";
+      setSolid(baseSolid && !forceOverlay);
     };
 
     compute();

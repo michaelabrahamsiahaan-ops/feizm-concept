@@ -1,0 +1,50 @@
+/*
+ * Design tokens generated from the "About Us Tokens" Figma variable
+ * collection via `figma-cli export css` (figma-cli repo, DESIGN.md).
+ * Prefixed with "fig-" to avoid colliding with shadcn's own radius and
+ * spacing scale. Regenerate with the same command if Figma changes.
+ */
+:root {
+  --fig-color-brand-50: #feefea;
+  --fig-color-brand-100: #fff2ea;
+  --fig-color-brand-200: #ffc2a0;
+  --fig-color-brand-300: #ffb79d;
+  --fig-color-brand-500: #f25a29;
+  --fig-color-brand-600: #df3d31;
+  --fig-color-brand-700: #ac401d;
+  --fig-color-neutral-0: #ffffff;
+  --fig-color-neutral-100: #f3f3f3;
+  --fig-color-neutral-150: #e8e8e8;
+  --fig-color-neutral-200: #e3e3e3;
+  --fig-color-neutral-300: #c5c5c4;
+  --fig-color-neutral-500: #838181;
+  --fig-color-neutral-700: #444444;
+  --fig-color-neutral-800: #252524;
+  --fig-color-neutral-900: #030000;
+  --fig-color-accent-yellow-light: #fffbdf;
+  --fig-color-accent-coral-light: #fbccbd;
+  --fig-radius-sm: 4px;
+  --fig-radius-md: 8px;
+  --fig-radius-lg: 12px;
+  --fig-radius-full: 1680px;
+  --fig-spacing-2: 2px;
+  --fig-spacing-4: 4px;
+  --fig-spacing-8: 8px;
+  --fig-spacing-11: 11px;
+  --fig-spacing-12: 12px;
+  --fig-spacing-15: 15px;
+  --fig-spacing-16: 16px;
+  --fig-spacing-22: 22px;
+  --fig-spacing-24: 24px;
+  --fig-spacing-32: 32px;
+  --fig-spacing-40: 40px;
+  --fig-spacing-60: 60px;
+  --fig-spacing-64: 64px;
+  --fig-spacing-128: 128px;
+  --fig-typography-size-sm: 16px;
+  --fig-typography-size-md: 18px;
+  --fig-typography-size-xl: 36px;
+  --fig-typography-size-2xl: 38px;
+  --fig-typography-size-3xl: 44px;
+  --fig-typography-font-family: Hanken Grotesk;
+}

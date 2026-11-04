@@ -1,11 +1,26 @@
+import type { Metadata } from "next";
 import { HomeHeroParallax } from "@/components/home/hero-parallax/HomeHeroParallax";
 import { HomeCompany } from "@/components/HomeCompany";
 import { StatsSection } from "@/components/home/stats-section";
 import { ServicesSection } from "@/components/home/services-section";
 import { PartnershipSection } from "@/components/home/partnership-section";
 import { IndustriesSection } from "@/components/home/industries-section";
+import { ClientIndustriesSection } from "@/components/home/client-industries-section";
+import { TestimoniesSection } from "@/components/home/testimonies-section";
+import { HomeCTASection } from "@/components/home/cta-section";
 import { SiteHeader } from "@/components/layout/site-header";
+import { SiteFooter } from "@/components/layout/site-footer";
 import { SmoothScroll } from "@/components/shared/smooth-scroll";
+
+// `absolute` bypasses the root layout's `title.template` ("%s | FeizM")
+// instead of appending to it — this page's title is meant to stand alone
+// in the tab, not read "Fleet Management & Telematics in Southeast Asia
+// | FeizM" the way About/Fleet Management System's titles do.
+export const metadata: Metadata = {
+  title: { absolute: "Fleet Management & Telematics in Southeast Asia" },
+  description:
+    "Real-time GPS tracking, driver safety and fleet insights, set up and supported by a local team in your time zone.",
+};
 
 /**
  * "Homepage" — Hero, Company, Stats, Services and Partnership exist in
@@ -57,11 +72,63 @@ import { SmoothScroll } from "@/components/shared/smooth-scroll";
  *
  * IndustriesSection ("Home / 06 Industries") is a plain static section —
  * no scroll-linked animation, no pin — with its own hover-accordion
- * interaction self-contained inside the component. It's now the LAST
- * section on the page — no Footer here yet (confirmed: not in Figma as a
- * `Home /` frame, unlike the About page). White-to-white hand-off from
- * Partnership's own background fade, no seam (see IndustriesSection's own
- * doc comment).
+ * interaction self-contained inside the component. White-to-white
+ * hand-off from Partnership's own background fade, no seam (see
+ * IndustriesSection's own doc comment).
+ *
+ * ClientIndustriesSection ("Home / 06.1 Client Industries") is a plain
+ * static section — a 4-logo "trusted by" strip, no scroll-linked
+ * animation, no pin — fixed 1440px, same convention as every other
+ * static section. Sits between Industries and Testimonies per its own
+ * "06.1" name; white background on both sides of it, no seam either way.
+ *
+ * Its wrapper gets `relative z-10` (unlike the plain `overflow-x-hidden`
+ * wrapper every other fixed-1440 section uses) to fix a real stacking
+ * bug, not a style preference: PartnershipSection's own zero-height
+ * sticky background layer (`position: sticky; height: 100vh;
+ * margin-bottom: -100vh` — see that component's own doc comment) still
+ * paints ON TOP of normal-flow content for roughly 100vh of scroll past
+ * Partnership's own end, even though it's earlier in the DOM — confirmed
+ * directly via `elementFromPoint` at this section's own top edge, which
+ * returned that sticky layer's div, not this section's content, and
+ * fixed by giving this wrapper its own stacking context. It was always
+ * silently true for whatever used to sit right after Partnership (both
+ * white, so invisible) — it only became VISIBLE now because this
+ * section draws a `#c5c5c4` border right at that top edge, which the
+ * sticky white layer was painting over, erasing exactly the top stroke.
+ * IndustriesSection likely has the same underlying defect at its own top
+ * edge (same position, same sticky culprit) but nothing there is thin or
+ * bordered enough to reveal it — left alone since it has no visible
+ * symptom to fix.
+ *
+ * TestimoniesSection ("Home / 07 Testimonies") is a plain static section
+ * again, same fixed-1440px convention as everything else here — it
+ * briefly had a scroll-driven "expand to fullscreen" reveal (small box ->
+ * fills the viewport), removed on the user's own request because that
+ * effect actually belongs on a LATER section whose Figma design is still
+ * in progress, not on Testimonies. The full implementation is preserved,
+ * not deleted, in
+ * [scroll-expand-reveal-wip.tsx](components/home/scroll-expand-reveal-wip.tsx)
+ * — see that file's own doc comment. Gets the same `overflow-x-hidden`
+ * wrapper as every other fixed-1440 section now that there's no sticky
+ * descendant for that wrapper to interfere with.
+ *
+ * HomeCTASection ("Home / 08 CTA", `components/home/cta-section.tsx` —
+ * exported as `HomeCTASection` since `CTASection` is already the About
+ * page's own, visually different closing banner) fills the gap that
+ * used to skip straight from Testimonies to Footer. It's now the ONE
+ * exception to the fixed-1440px convention, same reason Testimonies used
+ * to be: the user asked for the scroll-driven "expand to fullscreen"
+ * reveal parked for exactly this reuse (see that component's own doc
+ * comment, and the project memory note it came from) to be applied here,
+ * so it has to be fluid/full-bleed, not fixed-width. Rendered WITHOUT the
+ * `overflow-x-hidden` wrapper every fixed-1440 section above gets, for
+ * the same two reasons as before: a fluid section never overflows, and
+ * `overflow` on an ancestor of a `position: sticky` element can
+ * constrain or break its own stickiness.
+ *
+ * SiteFooter ("Footer Section", `components/layout/site-footer.tsx`) is
+ * the last thing, right after CTA.
  */
 export default function HomePage() {
   return (
@@ -100,6 +167,16 @@ export default function HomePage() {
           (window.innerWidth reporting 1440 instead of 375). */}
       <div className="w-full overflow-x-hidden">
         <IndustriesSection />
+      </div>
+      <div className="relative z-10 w-full overflow-x-hidden">
+        <ClientIndustriesSection />
+      </div>
+      <div className="w-full overflow-x-hidden">
+        <TestimoniesSection />
+      </div>
+      <HomeCTASection />
+      <div className="w-full overflow-x-hidden">
+        <SiteFooter />
       </div>
     </main>
   );
