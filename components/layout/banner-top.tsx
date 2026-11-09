@@ -32,7 +32,10 @@ export const BANNER_RESIZE_EVENT = "feizm-banner-resize";
  *
  * ---- Layout ----
  * Dark bar (`#0B0B0B`), white text at 90% opacity for the sentence, the
- * "ui.ux.abraham" credit link at full 100% opacity + underline so it still
+ * "ui.ux.abraham" credit — a real link to
+ * https://abraham-space.framer.website/ (the designer's own portfolio,
+ * given directly by the user; opens in a new tab since it navigates away
+ * from the site entirely) — at full 100% opacity + underline so it still
  * reads as a link against the dimmer surrounding text. ~32px tall on
  * desktop (13px text, 7px top/bottom padding); no truncation on narrow
  * viewports — the sentence just wraps to 2 lines (`flex-wrap` on the single
@@ -95,8 +98,15 @@ export function BannerTop() {
         style={{ color: "rgba(255,255,255,0.9)", fontSize: "13px", lineHeight: "18px" }}
       >
         Concept design project by{" "}
-        <span style={{ color: "#FFFFFF", textDecoration: "underline" }}>ui.ux.abraham</span> — not affiliated with
-        FeizM or Geotab.
+        <a
+          href="https://abraham-space.framer.website/"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "#FFFFFF", textDecoration: "underline" }}
+        >
+          ui.ux.abraham
+        </a>{" "}
+        — not affiliated with FeizM or Geotab.
       </p>
     </div>
   );
