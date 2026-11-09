@@ -307,7 +307,7 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
       >
         {/* Logo — cross-faded white/orange SVGs, see comment above */}
         <Link
-          href="/about-us"
+          href="/"
           aria-label="FeizM home"
           className="relative block h-[30px] w-[104px] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{ outlineColor: linkFocusColor }}

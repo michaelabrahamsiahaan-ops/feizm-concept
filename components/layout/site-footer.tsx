@@ -310,7 +310,7 @@ export function SiteFooter() {
       <div className="relative flex flex-col" style={{ gap: "var(--fig-spacing-24)" }}>
         <div className="flex items-start justify-between">
           <div className="flex flex-col" style={{ gap: 20 }}>
-            <Link href="/about-us" aria-label="FeizM home" className="block h-[30px] w-[104px]">
+            <Link href="/" aria-label="FeizM home" className="block h-[30px] w-[104px]">
               {/* eslint-disable-next-line @next/next/no-img-element -- plain <img>: next/image refuses local SVGs without images.dangerouslyAllowSVG, see this file's own doc comment */}
               <img src="/brand/logo-white.svg" alt="FeizM" className="h-full w-full" />
             </Link>
