@@ -1,9 +1,11 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import Link from "next/link";
 import { ChevronDown, Search } from "lucide-react";
 import { BANNER_RESIZE_EVENT } from "./banner-top";
+import { getLenis } from "@/components/shared/smooth-scroll";
 
 const NAV_LINKS = [
   "About us",
@@ -272,6 +274,27 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
     };
   }, [triggerId]);
 
+  // Clicking the logo while already on "/" has nowhere to navigate to —
+  // Link would still push a no-op "/" -> "/" history entry and do nothing
+  // visible, which reads as a dead click. Scrolling to top instead gives it
+  // the same "go home" affordance most sites' logos have. Read
+  // window.location.pathname directly in the handler (not a router hook)
+  // since this only needs to know where we are AT CLICK TIME, after
+  // hydration — same "plain DOM read over React state" preference this
+  // file already uses for window.scrollY/document.activeElement elsewhere.
+  // On every other route, falls through and lets <Link> navigate normally.
+  function handleLogoClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (window.location.pathname !== "/") return;
+    event.preventDefault();
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const lenis = getLenis();
+    if (lenis) {
+      lenis.scrollTo(0, { immediate: reduced });
+    } else {
+      window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    }
+  }
+
   return (
     <nav
       ref={navRef}
@@ -305,10 +328,13 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
           paddingRight: "var(--fig-spacing-40)",
         }}
       >
-        {/* Logo — cross-faded white/orange SVGs, see comment above */}
+        {/* Logo — cross-faded white/orange SVGs, see comment above. onClick
+            only intercepts the navigation when already on "/" (scrolls to
+            top instead) — see handleLogoClick's own comment. */}
         <Link
           href="/"
-          aria-label="FeizM home"
+          onClick={handleLogoClick}
+          aria-label="FeizM — go to homepage"
           className="relative block h-[30px] w-[104px] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{ outlineColor: linkFocusColor }}
         >
