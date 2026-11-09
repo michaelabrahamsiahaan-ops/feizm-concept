@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Building, CalendarFold, Earth, Truck } from "lucide-react";
 import type { ComponentType } from "react";
 import { HalftoneGlobeWidget } from "../HalftoneGlobeWidget";
+import { BANNER_RESIZE_EVENT } from "../layout/banner-top";
 import { SectionBadge } from "../SectionBadge";
 
 // ---- Card: fluid, fits the viewport under the header ----
@@ -316,7 +317,14 @@ export function StatsSection() {
     }
     measureFit();
     window.addEventListener("resize", measureFit);
-    return () => window.removeEventListener("resize", measureFit);
+    // --header-h changes with no resize event when BannerTop is dismissed
+    // (or wraps to 2 lines) — same staleness this `available` math would
+    // otherwise carry, see HomeCompany's own listener for the full shape.
+    window.addEventListener(BANNER_RESIZE_EVENT, measureFit);
+    return () => {
+      window.removeEventListener("resize", measureFit);
+      window.removeEventListener(BANNER_RESIZE_EVENT, measureFit);
+    };
   }, []);
 
   useLayoutEffect(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { BANNER_RESIZE_EVENT } from "@/components/layout/banner-top";
 import { SectionBadge } from "@/components/SectionBadge";
 import { ScrollFrameSequence, type ScrollFrameSequenceHandle } from "@/components/shared/scroll-frame-sequence";
 
@@ -750,6 +751,12 @@ export function PartnershipSection() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", update);
+    // Dismissing BannerTop changes --header-h (which `measure` reads for
+    // `deviceStickY`) with no resize event. The body ResizeObserver below
+    // does happen to catch it today — every page's <main> has
+    // `paddingTop: var(--banner-h)`, so the document shrinks too — but
+    // that's an incidental side effect, not the signal; bind the real one.
+    window.addEventListener(BANNER_RESIZE_EVENT, update);
     // Document height changes (more sections added below, images/fonts
     // loading further down the page) change `maxScrollY` and therefore
     // the b3 clamp — re-measure whenever that happens, not just on
@@ -761,6 +768,7 @@ export function PartnershipSection() {
       cancelAnimationFrame(raf);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", update);
+      window.removeEventListener(BANNER_RESIZE_EVENT, update);
       bodyRO.disconnect();
     };
     // `isDesktop` is a dependency for the same reason as the reveal

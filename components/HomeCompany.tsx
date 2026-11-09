@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 import { OVERLAP_VH } from "@/components/home/overlap-config";
+import { BANNER_RESIZE_EVENT } from "@/components/layout/banner-top";
 import { SectionBadge } from "@/components/SectionBadge";
 
 // ---- Tunable constants ----
@@ -438,7 +439,18 @@ export function HomeCompany() {
 
     measureFit();
     window.addEventListener("resize", measureFit);
-    return () => window.removeEventListener("resize", measureFit);
+    // Dismissing BannerTop (or its mobile 2-line wrap) changes --banner-h,
+    // and so --header-h, with NO resize event — without this, stickyTopPx
+    // stays at the value measured while the banner was still showing, and
+    // the pin sits that much too low: a strip of the still-stuck Hero shows
+    // above it, and SiteHeader's own solid trigger (which compares this
+    // pin's top against the now-shorter chrome) reads it as "not reached
+    // yet" and drops back to its white-on-transparent overlay state.
+    window.addEventListener(BANNER_RESIZE_EVENT, measureFit);
+    return () => {
+      window.removeEventListener("resize", measureFit);
+      window.removeEventListener(BANNER_RESIZE_EVENT, measureFit);
+    };
   }, [isDesktop]);
 
   const [inView, setInView] = useState(false);
