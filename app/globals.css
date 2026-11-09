@@ -60,13 +60,13 @@
   --nav-h: 75px;
   /* BannerTop's own real height (components/layout/banner-top.tsx),
      measured live the same way via ResizeObserver — same fallback-only
-     caveat as --nav-h above. BannerTop is a permanent, non-dismissible
-     `position: fixed` bar now (always on screen, not just at the top of
-     the page — an earlier revision had it scroll away with the page and
-     this value briefly meant something narrower; see that component's
-     own doc comment for the full history), so every consumer below can
-     safely treat it as part of the page's permanent fixed chrome. */
-  --banner-h: 32px;
+     caveat as --nav-h above. 34px matches Figma's own node (8px top/bottom
+     padding + 18px line-height) as of the v3 design update — see that
+     component's own doc comment for the full revision history. BannerTop
+     is `position: fixed` and dismissible (closing it sets this to 0px);
+     every consumer below treats it as part of the page's fixed chrome
+     while it's showing. */
+  --banner-h: 34px;
   /* Total fixed-chrome height from the real viewport top — BannerTop
      (always visible) plus SiteHeader's nav (sits directly below it, see
      site-header.tsx). Every `scroll-mt-[var(--header-h)]` anchor target

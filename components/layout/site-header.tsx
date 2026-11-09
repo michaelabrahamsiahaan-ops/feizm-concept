@@ -167,22 +167,22 @@ function bannerHeight() {
  * a future breakpoint ever made it not be.
  *
  * ---- Stacking below BannerTop ----
- * BannerTop (components/layout/banner-top.tsx) is a permanent, non-
- * dismissible disclaimer bar, `position: fixed` at the very top with a
- * HIGHER z-index than this `<nav>` — it is always on screen, not just at
- * the top of the page. This `<nav>` stays `position: fixed` too (zero
- * layout footprint — required for Hero's full-bleed background to sit
- * directly behind a transparent-overlay nav; `sticky` was considered and
- * rejected, it would reserve its own 75px in normal flow and shove Hero
- * down by that much on top of the banner's own offset). Since BannerTop
- * never moves or disappears, the nav's own `top: var(--banner-h)` (set
- * once in the JSX style below) is ALL that's needed to sit directly below
- * it — no scroll-tick JS repositioning, unlike an earlier revision where
- * BannerTop scrolled away with the page and the nav had to chase a moving
- * target (`Math.max(0, bannerHeight - scrollY)` on every tick). Because
+ * BannerTop (components/layout/banner-top.tsx) is a dismissible disclaimer
+ * bar, `position: fixed` at the very top with a HIGHER z-index than this
+ * `<nav>` — on screen (not just at the top of the page) until the user
+ * closes it. This `<nav>` stays `position: fixed` too (zero layout
+ * footprint — required for Hero's full-bleed background to sit directly
+ * behind a transparent-overlay nav; `sticky` was considered and rejected,
+ * it would reserve its own 75px in normal flow and shove Hero down by that
+ * much on top of the banner's own offset). BannerTop never SCROLLS away
+ * (unlike an earlier revision, where the nav had to chase a moving target
+ * via `Math.max(0, bannerHeight - scrollY)` on every scroll tick) — it only
+ * ever changes height by being resized or dismissed, so the nav's own
+ * `top: var(--banner-h)` (set once in the JSX style below) is ALL that's
+ * needed to sit directly below it, no scroll-tick JS repositioning. Because
  * `top` is a plain `var()` read, the nav repositions itself automatically
- * the instant `--banner-h` changes (e.g. the mobile 2-line wrap), with no
- * JS involved at all.
+ * the instant `--banner-h` changes — the mobile 2-line wrap, or the
+ * banner being dismissed down to 0 — with no JS involved at all.
  *
  * Every page's own `<main>` also adds `paddingTop: var(--banner-h)` (see
  * e.g. app/home/page.tsx) so Hero — and everything after it — starts that
