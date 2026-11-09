@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-
-const DISMISS_KEY = "feizm-banner-top-dismissed";
+import { useLayoutEffect, useRef, useState } from "react";
 
 // SiteHeader's solid-trigger effect only re-runs on `scroll`/`resize` —
 // this bar's own ResizeObserver firing (e.g. the mobile 2-line wrap
@@ -37,9 +35,9 @@ export const BANNER_RESIZE_EVENT = "feizm-banner-resize";
  * (`public/icons/banner-close.svg`, `figma-cli export node 345:274 -f
  * svg`) rather than a reused lucide-react icon — lucide's `X` is
  * stroke-based and would only approximate the actual shape, and the user
- * asked for a match to the design, not a generic substitute. Persistence
- * (localStorage) is back too — a dismiss button that forgets on every
- * reload isn't really a dismiss.
+ * asked for a match to the design, not a generic substitute.
+ * v4: the close button stays, but its `localStorage` persistence was
+ * removed — see "Dismiss behavior" below.
  *
  * ---- Layout ----
  * Pure black (`#000000` — sampled directly from Figma; no existing neutral
@@ -76,25 +74,21 @@ export const BANNER_RESIZE_EVENT = "feizm-banner-resize";
  *     right under this bar and crop its top edge while it's showing.
  *
  * ---- Dismiss behavior ----
- * Clicking the close icon hides the banner (immediately sets `--banner-h`
- * to `0px` rather than waiting on the ResizeObserver's own
- * disconnect-on-unmount, which wouldn't reset the variable on its own) and
- * remembers the dismissal in `localStorage` so it stays hidden on return
- * visits. SSR-safe default is "showing" (matches globals.css's own
- * `--banner-h` pre-hydration fallback) — a returning, already-dismissed
- * visitor briefly sees the banner's reserved space before this component's
- * own mount effect reads `localStorage` and corrects it to hidden.
+ * Clicking the close icon hides the banner for the CURRENT page view only
+ * — it immediately sets `--banner-h` to `0px` (rather than waiting on the
+ * ResizeObserver's own disconnect-on-unmount, which wouldn't reset the
+ * variable on its own) and every consumer repositions off that. The
+ * dismissal is deliberately NOT persisted: the banner comes back on every
+ * reload and every new page, on explicit request. An earlier revision did
+ * remember it in `localStorage`, which read as the banner being "gone for
+ * good" — wrong for a concept-project disclaimer that should be visible to
+ * anyone landing on any page. Nothing is stored, so there is also no
+ * pre-hydration flash to correct and no SSR-mismatch tradeoff: the server
+ * and the first client render always agree on "showing".
  */
 export function BannerTop() {
   const [dismissed, setDismissed] = useState(false);
   const barRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (window.localStorage.getItem(DISMISS_KEY) === "1") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage has no SSR-safe value, same tradeoff as every other such check in this project
-      setDismissed(true);
-    }
-  }, []);
 
   useLayoutEffect(() => {
     if (dismissed) {
@@ -120,7 +114,6 @@ export function BannerTop() {
   if (dismissed) return null;
 
   function dismiss() {
-    window.localStorage.setItem(DISMISS_KEY, "1");
     document.documentElement.style.setProperty("--banner-h", "0px");
     window.dispatchEvent(new Event(BANNER_RESIZE_EVENT));
     setDismissed(true);
