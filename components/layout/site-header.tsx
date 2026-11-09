@@ -363,8 +363,14 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
         >
           {NAV_LINKS.map((label) => (
             <li key={label}>
-              <a
-                href="#"
+              <Link
+                href={
+                  label === "About us"
+                    ? "/about-us"
+                    : label === "Services"
+                      ? "/fleet-management-system"
+                      : "#"
+                }
                 className={`block rounded transition-colors hover:opacity-70 ${TRANSITION} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
                 style={{
                   paddingTop: "var(--fig-spacing-11)",
@@ -376,7 +382,7 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
                 }}
               >
                 {label}
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
