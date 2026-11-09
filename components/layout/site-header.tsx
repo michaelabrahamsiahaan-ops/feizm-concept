@@ -215,11 +215,23 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
   const headerHeightRef = useRef(INITIAL_HEADER_HEIGHT);
   const linkFocusColor = solid ? "#282828" : "var(--fig-color-neutral-0)";
 
-  // Measure the header's real rendered height and publish it as
-  // --header-h on :root — see the doc comment above for why this
-  // replaces a hard-coded offset everywhere it would otherwise be needed
-  // (scroll-margin-top on scroll targets, and this component's own
-  // trigger math below).
+  // Measure the header's real rendered height and publish it as --nav-h
+  // AND --header-h (nav + banner, resolved to a literal px number) on
+  // :root. globals.css ALSO defines --header-h, but only as
+  // `calc(var(--nav-h) + var(--banner-h))` — fine for genuine CSS
+  // consumers (`top: var(--header-h)`, `scroll-mt-[var(--header-h)]`),
+  // which resolve calc() chains correctly at layout time, but several
+  // components (HomeCompany.tsx, stats-section.tsx, partnership-
+  // section.tsx, scroll-link.tsx) read --header-h BACK into JS via
+  // `getComputedStyle(...).getPropertyValue("--header-h")` expecting a
+  // plain pixel number. `getPropertyValue` on a custom property returns
+  // its literal token string — `"calc(75px + 34px)"`, not a resolved
+  // value — so every one of those readers' own `parseFloat(...)` got
+  // `NaN` and silently fell back to 0 (confirmed: this was the entire
+  // cause of the Company section's pin sitting under the nav — see that
+  // component's own doc comment). Setting --header-h here directly, as an
+  // already-resolved px string, makes it readable by both consumption
+  // styles — no hardcoded 34/75, still fully live-measured.
   useLayoutEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
@@ -228,6 +240,7 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
       const height = nav.getBoundingClientRect().height;
       headerHeightRef.current = height;
       document.documentElement.style.setProperty("--nav-h", `${height}px`);
+      document.documentElement.style.setProperty("--header-h", `${height + bannerHeight()}px`);
     };
 
     apply();
@@ -237,7 +250,15 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
     // same bug confirmed in banner-top.tsx's identical ResizeObserver.
     const ro = new ResizeObserver(() => apply());
     ro.observe(nav);
-    return () => ro.disconnect();
+    // BannerTop's own ResizeObserver can change --banner-h (dismiss, the
+    // mobile 2-line wrap) without the nav itself resizing — without this,
+    // --header-h would go stale the same way the solid-trigger effect's
+    // own banner dependency is documented below.
+    window.addEventListener(BANNER_RESIZE_EVENT, apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener(BANNER_RESIZE_EVENT, apply);
+    };
   }, []);
 
   useLayoutEffect(() => {

@@ -75,7 +75,15 @@
      `<main>` adds `paddingTop: var(--banner-h)` separately (not
      --header-h) so Hero sits directly below the banner with the nav
      still overlaying its own usual portion of it, same relationship as
-     before BannerTop existed, just shifted down as a unit. */
+     before BannerTop existed, just shifted down as a unit.
+     This `calc()` is only a same-frame-zero FALLBACK, same caveat as
+     --nav-h/--banner-h above: it's what a genuine CSS consumer sees
+     pre-hydration. site-header.tsx's own ResizeObserver overwrites this
+     with an already-resolved px value (`${navHeight + bannerHeight}px`)
+     the instant it mounts, and keeps it live — components that read
+     --header-h back into JS via getComputedStyle + parseFloat need that
+     resolved form; reading this calc() string back gives NaN, not a
+     number (confirmed bug, see site-header.tsx's own comment there). */
   --header-h: calc(var(--nav-h) + var(--banner-h));
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
