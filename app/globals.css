@@ -50,15 +50,33 @@
 }
 
 :root {
-  /* Bootstrap default for SiteHeader's measured height (see
-     components/layout/site-header.tsx), so `scroll-margin-top:
-     var(--header-h)` is already correct for the browser's native
-     pre-hydration anchor-scroll on a direct #hash visit, before
-     SiteHeader's own ResizeObserver has run even once. SiteHeader
-     overwrites this with the real measured value on mount (and keeps it
-     live) — this is only a same-frame-zero fallback, not the source of
-     truth for any scroll-offset math in the app. */
-  --header-h: 75px;
+  /* Bootstrap default for SiteHeader's measured nav height (see
+     components/layout/site-header.tsx) — a same-frame-zero fallback so
+     `--header-h` below is already sane before SiteHeader's own
+     ResizeObserver has run even once (e.g. a direct #hash visit's native
+     pre-hydration anchor-scroll). SiteHeader overwrites this with the
+     real measured value on mount and keeps it live; this is not the
+     source of truth for any scroll-offset math in the app. */
+  --nav-h: 75px;
+  /* BannerTop's own real height (components/layout/banner-top.tsx),
+     measured live the same way via ResizeObserver — same fallback-only
+     caveat as --nav-h above. BannerTop is a permanent, non-dismissible
+     `position: fixed` bar now (always on screen, not just at the top of
+     the page — an earlier revision had it scroll away with the page and
+     this value briefly meant something narrower; see that component's
+     own doc comment for the full history), so every consumer below can
+     safely treat it as part of the page's permanent fixed chrome. */
+  --banner-h: 32px;
+  /* Total fixed-chrome height from the real viewport top — BannerTop
+     (always visible) plus SiteHeader's nav (sits directly below it, see
+     site-header.tsx). Every `scroll-mt-[var(--header-h)]` anchor target
+     site-wide reads this SINGLE combined value so a ScrollLink/#hash
+     landing clears both bars, not just the nav — and every page's own
+     `<main>` adds `paddingTop: var(--banner-h)` separately (not
+     --header-h) so Hero sits directly below the banner with the nav
+     still overlaying its own usual portion of it, same relationship as
+     before BannerTop existed, just shifted down as a unit. */
+  --header-h: calc(var(--nav-h) + var(--banner-h));
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

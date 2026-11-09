@@ -447,6 +447,19 @@ export function HomeHeroParallax() {
             // prototype value (0 on a device with no notch/inset; a
             // non-zero value only on devices that have one).
             //
+            // `top`/`height` both also add `var(--banner-h)` — BannerTop
+            // (components/layout/banner-top.tsx) is a permanent, always-
+            // visible `position: fixed` bar with a HIGHER z-index than
+            // SiteHeader. A bare `top: 0` would stick this pin right under
+            // it, cropping the pinned hero's own top edge behind the now-
+            // opaque banner for the entire scrub (confirmed: the old bare
+            // `env(...)` value predates the banner being permanent, back
+            // when it was dismissible/scrolled-away and never actually
+            // overlapped the pin). `<main>`'s own `paddingTop:
+            // var(--banner-h)` (see app/home/page.tsx) handles the
+            // pre-scroll static position; this handles the pin's own
+            // sticky offset once scrolling begins.
+            //
             // Unconditional now (used to be `position:relative` +
             // `aspectRatio` under reduced motion, to avoid a tall
             // scroll-jacking area with nothing to scrub) — reduced
@@ -458,9 +471,9 @@ export function HomeHeroParallax() {
             // with zero scrub distance before the hold in the reduced
             // case (REDUCED_STORY_VH).
             position: "sticky",
-            top: "env(safe-area-inset-top, 0px)",
+            top: "calc(var(--banner-h) + env(safe-area-inset-top, 0px))",
             width: "100%",
-            height: "calc(100svh - env(safe-area-inset-top, 0px))",
+            height: "calc(100svh - var(--banner-h) - env(safe-area-inset-top, 0px))",
             backgroundColor: "#0E0E11",
           }}
         >

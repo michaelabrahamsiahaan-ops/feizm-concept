@@ -8,6 +8,7 @@ import { IndustriesSection } from "@/components/home/industries-section";
 import { ClientIndustriesSection } from "@/components/home/client-industries-section";
 import { TestimoniesSection } from "@/components/home/testimonies-section";
 import { HomeCTASection } from "@/components/home/cta-section";
+import { BannerTop } from "@/components/layout/banner-top";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SmoothScroll } from "@/components/shared/smooth-scroll";
@@ -132,8 +133,12 @@ export const metadata: Metadata = {
  */
 export default function HomePage() {
   return (
-    <main className="flex min-h-screen flex-col items-start justify-start">
+    <main
+      className="flex min-h-screen flex-col items-start justify-start"
+      style={{ paddingTop: "var(--banner-h)" }}
+    >
       <SmoothScroll />
+      <BannerTop />
       <SiteHeader triggerId="home-company" />
       <HomeHeroParallax />
       <HomeCompany />

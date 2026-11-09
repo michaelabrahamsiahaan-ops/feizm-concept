@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Search } from "lucide-react";
+import { BANNER_RESIZE_EVENT } from "./banner-top";
 
 const NAV_LINKS = [
   "About us",
@@ -15,12 +16,23 @@ const NAV_LINKS = [
 
 // Only an initial value for the ref below, corrected synchronously (before
 // paint) by the ResizeObserver effect the first time it runs — never read
-// again after that. Matches globals.css's own `--header-h` fallback for
+// again after that. Matches globals.css's own `--nav-h` fallback for
 // the same reason (see that file's comment); neither one is the source of
 // truth for the app's actual scroll-offset math, which is the live
 // measured DOM height.
 const INITIAL_HEADER_HEIGHT = 75;
 const TRANSITION = "duration-[250ms] ease-in-out motion-reduce:transition-none";
+
+// Same pattern as scroll-link.tsx's own `headerHeight()`, but reading
+// --banner-h instead — BannerTop's own live-measured height, published via
+// its own ResizeObserver (see that component's doc comment). Used by the
+// solid-trigger effect below for where the fixed chrome's bottom edge
+// currently is (nav's own `top` no longer needs any JS — see below).
+function bannerHeight() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--banner-h");
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
+}
 
 /**
  * Site header — overlay/solid, scroll-triggered.
@@ -51,10 +63,14 @@ const TRANSITION = "duration-[250ms] ease-in-out motion-reduce:transition-none";
  *     not an exact match for neutral-800 (#252524, off by 3 in each
  *     channel); kept as a literal rather than snapped to the token, since
  *     it's what Figma actually has
- *   - "Schedule Demo" button: fill/border/radius/text identical in both
- *     source frames (confirmed byte-for-byte) — rendered with fixed
- *     brand-500/accent-coral-light styling regardless of `solid`, no
- *     variant branching on it at all
+ *   - CTA button: fill/border/radius identical in both source frames
+ *     (confirmed byte-for-byte) — rendered with fixed brand-500/
+ *     accent-coral-light styling regardless of `solid`, no variant
+ *     branching on it at all. Figma's own text is "Schedule Demo"; reads
+ *     "Request Demo" here on the user's own explicit request (matches
+ *     the CTA buttons elsewhere on the site, e.g. HomeCTASection's own
+ *     "Request Demo" button) — a deliberate copy change, not a Figma
+ *     re-read.
  *   - gaps (22px between links, 22px between actions) are spacing-22 in
  *     both frames; link vertical padding is spacing-11
  *   - "Nav Menu" is NOT a normal flex sibling — it's absolutely positioned
@@ -138,14 +154,42 @@ const TRANSITION = "duration-[250ms] ease-in-out motion-reduce:transition-none";
  * satisfies the boundary — not only once the scroll settles.
  *
  * Header height: measured live off the `<nav>` itself via ResizeObserver
- * and published as `--header-h` on `:root` (consumed by
- * `scroll-mt-[var(--header-h)]` on every scroll target), rather than
- * hard-coding a pixel offset anywhere. The overlay and solid states share
- * one fixed-height `<nav>` (only the background/logo/text colors
- * cross-fade — see below), so there's no "measure it in the solid state
- * specifically" step needed; the measured height is state-independent by
- * construction, and would stay correct if a future breakpoint ever made
- * it not be.
+ * and published as `--nav-h` on `:root`. `globals.css` combines it with
+ * BannerTop's own `--banner-h` into `--header-h: calc(var(--nav-h) +
+ * var(--banner-h))` — consumed by `scroll-mt-[var(--header-h)]` on every
+ * scroll target — rather than hard-coding a pixel offset anywhere. The
+ * overlay and solid states share one fixed-height `<nav>` (only the
+ * background/logo/text colors cross-fade — see below), so there's no
+ * "measure it in the solid state specifically" step needed; the measured
+ * height is state-independent by construction, and would stay correct if
+ * a future breakpoint ever made it not be.
+ *
+ * ---- Stacking below BannerTop ----
+ * BannerTop (components/layout/banner-top.tsx) is a permanent, non-
+ * dismissible disclaimer bar, `position: fixed` at the very top with a
+ * HIGHER z-index than this `<nav>` — it is always on screen, not just at
+ * the top of the page. This `<nav>` stays `position: fixed` too (zero
+ * layout footprint — required for Hero's full-bleed background to sit
+ * directly behind a transparent-overlay nav; `sticky` was considered and
+ * rejected, it would reserve its own 75px in normal flow and shove Hero
+ * down by that much on top of the banner's own offset). Since BannerTop
+ * never moves or disappears, the nav's own `top: var(--banner-h)` (set
+ * once in the JSX style below) is ALL that's needed to sit directly below
+ * it — no scroll-tick JS repositioning, unlike an earlier revision where
+ * BannerTop scrolled away with the page and the nav had to chase a moving
+ * target (`Math.max(0, bannerHeight - scrollY)` on every tick). Because
+ * `top` is a plain `var()` read, the nav repositions itself automatically
+ * the instant `--banner-h` changes (e.g. the mobile 2-line wrap), with no
+ * JS involved at all.
+ *
+ * Every page's own `<main>` also adds `paddingTop: var(--banner-h)` (see
+ * e.g. app/home/page.tsx) so Hero — and everything after it — starts that
+ * same distance down too, preserving the nav-overlays-hero relationship
+ * exactly as before, just shifted down as a unit instead of starting at
+ * the very top of the viewport. The solid-trigger math below reads
+ * `bannerHeight() + headerHeightRef.current` for where the fixed chrome's
+ * bottom edge currently is — both now constant per viewport width, not
+ * scroll-dependent.
  *
  * Initial state uses `useLayoutEffect` (not `useEffect`) specifically so a
  * mid-page refresh or anchor-link load computes and applies the correct
@@ -161,7 +205,7 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
   const linkFocusColor = solid ? "#282828" : "var(--fig-color-neutral-0)";
 
   // Measure the header's real rendered height and publish it as
-  // `--header-h` on :root — see the doc comment above for why this
+  // --header-h on :root — see the doc comment above for why this
   // replaces a hard-coded offset everywhere it would otherwise be needed
   // (scroll-margin-top on scroll targets, and this component's own
   // trigger math below).
@@ -169,14 +213,18 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
     const nav = navRef.current;
     if (!nav) return;
 
-    const apply = (height: number) => {
+    const apply = () => {
+      const height = nav.getBoundingClientRect().height;
       headerHeightRef.current = height;
-      document.documentElement.style.setProperty("--header-h", `${height}px`);
+      document.documentElement.style.setProperty("--nav-h", `${height}px`);
     };
 
-    apply(nav.getBoundingClientRect().height);
+    apply();
 
-    const ro = new ResizeObserver(([entry]) => apply(entry.contentRect.height));
+    // getBoundingClientRect (border-box), not entry.contentRect (content box
+    // only) — contentRect under-reports by the nav's own padding/border, the
+    // same bug confirmed in banner-top.tsx's identical ResizeObserver.
+    const ro = new ResizeObserver(() => apply());
     ro.observe(nav);
     return () => ro.disconnect();
   }, []);
@@ -191,7 +239,8 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
     // doc comment above for why a sentinel + IntersectionObserver used to
     // be here and why it broke for an exact ScrollLink landing).
     const compute = () => {
-      const baseSolid = target.getBoundingClientRect().top <= headerHeightRef.current + SOLID_EPSILON;
+      const navBottom = bannerHeight() + headerHeightRef.current;
+      const baseSolid = target.getBoundingClientRect().top <= navBottom + SOLID_EPSILON;
       const forceOverlay = document.documentElement.dataset.forceHeaderOverlay === "true";
       setSolid(baseSolid && !forceOverlay);
     };
@@ -210,18 +259,24 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", compute);
+    // BannerTop's own ResizeObserver can change --banner-h (e.g. the mobile
+    // 2-line wrap threshold) without any scroll or window resize happening —
+    // without this, the solid-trigger math would read a stale banner height
+    // until the next real scroll.
+    window.addEventListener(BANNER_RESIZE_EVENT, compute);
 
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", compute);
+      window.removeEventListener(BANNER_RESIZE_EVENT, compute);
     };
   }, [triggerId]);
 
   return (
     <nav
       ref={navRef}
-      className="fixed inset-x-0 top-0 z-50 h-[75px] w-full"
-      style={{ fontFamily: "var(--font-hanken-grotesk)" }}
+      className="fixed inset-x-0 z-50 h-[75px] w-full"
+      style={{ top: "var(--banner-h)", fontFamily: "var(--font-hanken-grotesk)" }}
     >
       {/* Background layers — cross-faded via opacity, see comment above */}
       <div
@@ -319,7 +374,7 @@ export function SiteHeader({ triggerId = "company-profile" }: { triggerId?: stri
               fontSize: "14.97px",
             }}
           >
-            Schedule Demo
+            Request Demo
           </button>
 
           <button

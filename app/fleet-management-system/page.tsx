@@ -4,6 +4,7 @@ import { FleetWhy } from "@/components/FleetWhy";
 import { FleetUSP } from "@/components/FleetUSP";
 import { FleetTopFeatures } from "@/components/FleetTopFeatures";
 import { HomeCTASection } from "@/components/home/cta-section";
+import { BannerTop } from "@/components/layout/banner-top";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 
@@ -50,7 +51,11 @@ export const metadata: Metadata = {
  */
 export default function FleetManagementSystemPage() {
   return (
-    <main className="flex min-h-screen flex-col items-start justify-start">
+    <main
+      className="flex min-h-screen flex-col items-start justify-start"
+      style={{ paddingTop: "var(--banner-h)" }}
+    >
+      <BannerTop />
       <SiteHeader triggerId="why-feizmfleet" />
       <FleetHero />
       <FleetWhy />

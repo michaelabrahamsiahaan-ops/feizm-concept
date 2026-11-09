@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Hero } from "@/components/Hero";
+import { BannerTop } from "@/components/layout/banner-top";
 import { SiteHeader } from "@/components/layout/site-header";
 import { CompanyProfile } from "@/components/CompanyProfile";
 import { WhyFeizm } from "@/components/WhyFeizm";
@@ -49,13 +50,20 @@ export const metadata: Metadata = {
  */
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-start justify-start bg-zinc-100">
+    <main
+      className="flex min-h-screen flex-col items-start justify-start bg-zinc-100"
+      style={{ paddingTop: "var(--banner-h)" }}
+    >
       {/* SiteHeader is fixed to the viewport (not just overlaid on Hero) so
           it stays pinned while scrolling past Hero into the rest of the
           page — `fixed` takes it out of normal flow entirely, so this
           doesn't shift any later section. It switches its own overlay/solid
           variant internally based on the #company-profile section (see
-          components/layout/site-header.tsx). */}
+          components/layout/site-header.tsx). BannerTop is fixed too
+          (permanently visible, higher z-index) — `<main>`'s own
+          `paddingTop: var(--banner-h)` is what pushes Hero (and everything
+          after it) down to clear it; see banner-top.tsx's doc comment. */}
+      <BannerTop />
       <SiteHeader />
       <Hero />
       <CompanyProfile />
